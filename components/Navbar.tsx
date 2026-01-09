@@ -10,7 +10,7 @@ export default function Navbar() {
             href="/"
             className="flex items-center gap-2 text-lg font-semibold tracking-tight"
           >
-            <span className="font-display text-xl">Handyman AI</span>
+            <span className="font-display text-xl">Fixly</span>
           </Link>
           <nav className="flex flex-wrap items-center gap-4 text-sm text-[var(--muted)]">
             <Link className="transition hover:text-white" href="/pricing">

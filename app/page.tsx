@@ -68,7 +68,7 @@ export default function Home() {
         <>
           <section
             id="hero"
-            className="relative flex min-h-[80vh] flex-col justify-center border-b border-[var(--border)] bg-[radial-gradient(circle_at_top,rgba(255,122,26,0.15),transparent_50%)] pt-20 pb-20"
+            className="relative flex min-h-[80vh] flex-col justify-center bg-[radial-gradient(circle_at_top,rgba(255,122,26,0.15),transparent_50%)] pt-20 pb-20"
           >
             <Container>
               <div className="mx-auto flex max-w-4xl flex-col items-center text-center">
@@ -84,19 +84,19 @@ export default function Home() {
                 <p className="mt-6 max-w-2xl text-lg text-[var(--muted)]">
                   Describe the problem, upload a photo, and get professional repair guidance in seconds.
                 </p>
+              </div>
 
-                <div className="mt-12 w-full">
-                  <div className="relative mx-auto w-full max-w-3xl">
-                    <div className="min-h-[300px] w-full">
-                      <GrokThread />
-                    </div>
+              <div className="mt-12 w-full">
+                <div className="relative mx-auto w-full max-w-3xl">
+                  <div className="min-h-[300px] w-full">
+                    <GrokThread />
                   </div>
                 </div>
               </div>
             </Container>
           </section>
 
-          <section className="border-b border-[var(--border)] bg-[var(--bg)]">
+          <section className="bg-[var(--bg)]">
             <Container>
               <div className="py-16 text-center lg:py-24">
                 <p className="mb-3 text-xs uppercase tracking-[0.2em] text-[var(--accent-soft)]">
@@ -106,7 +106,7 @@ export default function Home() {
                   Stop guessing. Fix it right the first time.
                 </h2>
                 <p className="mx-auto mt-5 max-w-2xl text-base text-[var(--muted)] sm:text-lg">
-                  Handyman AI helps you diagnose the problem and deliver professional-grade repair steps in minutes.
+                  Fixly helps you diagnose the problem and deliver professional-grade repair steps in minutes.
                 </p>
                 <div className="mt-8 flex justify-center gap-4">
                   <Link className={primaryButton} href="/signup">
@@ -120,7 +120,9 @@ export default function Home() {
             </Container>
           </section>
 
-          <section id="how-it-works" className="border-y border-[var(--border)] bg-[var(--bg-elev)] py-16 lg:py-24">
+          <div className="mx-auto h-1 w-24 rounded-full bg-[var(--accent)]" />
+
+          <section id="how-it-works" className="bg-[var(--bg)] py-16 lg:py-24">
             <Container>
               <div className="mx-auto max-w-5xl">
                 <p className="mb-3 text-xs uppercase tracking-[0.2em] text-[var(--accent-soft)]">
@@ -170,7 +172,7 @@ export default function Home() {
             <Container>
               <div className="mx-auto max-w-5xl">
                 <p className="mb-3 text-xs uppercase tracking-[0.2em] text-[var(--accent-soft)]">
-                  Why Handyman AI
+                  Why Fixly
                 </p>
                 <h2 className="font-display text-3xl font-semibold text-white sm:text-4xl">
                   Save money, time, and frustration on every repair.
@@ -192,7 +194,7 @@ export default function Home() {
                   </div>
                   <div className="rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] p-6">
                     <h3 className="font-display text-lg text-white">
-                      Handyman AI guidance
+                      Fixly guidance
                     </h3>
                     <ul className="mt-3 space-y-2 text-sm text-[var(--muted)]">
                       <li>Keep more money in your pocket.</li>
@@ -205,7 +207,9 @@ export default function Home() {
             </Container>
           </section>
 
-          <section className="border-y border-[var(--border)] bg-[var(--bg-elev)] py-16 lg:py-24">
+          <div className="mx-auto h-1 w-24 rounded-full bg-[var(--accent)]" />
+
+          <section className="bg-[var(--bg)] py-16 lg:py-24">
             <Container>
               <div className="mx-auto max-w-4xl text-center">
                 <p className="mb-3 text-xs uppercase tracking-[0.2em] text-[var(--accent-soft)]">
@@ -215,7 +219,7 @@ export default function Home() {
                   Professional guidance with safety in mind.
                 </h2>
                 <p className="mt-4 text-[var(--muted)]">
-                  Handyman AI prioritizes safe practices and recommends when to
+                  Fixly prioritizes safe practices and recommends when to
                   pause and consult a licensed professional for electrical, gas, or
                   structural work.
                 </p>

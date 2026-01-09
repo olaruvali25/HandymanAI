@@ -18,11 +18,11 @@ const sora = Sora({
 
 export const metadata: Metadata = {
   title: {
-    default: "Handyman AI",
-    template: "%s | Handyman AI",
+    default: "Fixly",
+    template: "%s | Fixly",
   },
   description:
-    "Fast, reliable step-by-step home repair guidance powered by Handyman AI.",
+    "Fast, reliable step-by-step home repair guidance powered by Fixly.",
 };
 
 export default function RootLayout({

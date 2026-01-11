@@ -1,6 +1,15 @@
 "use client";
 
-import { useEffect, useRef, useState, type ChangeEvent } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ChangeEvent,
+} from "react";
 import {
   AssistantRuntimeProvider,
   ComposerPrimitive,
@@ -12,6 +21,91 @@ import {
   type ChatModelAdapter,
   type ThreadMessage,
 } from "@assistant-ui/react";
+
+type SpeechRecognitionResultLike = {
+  transcript?: string;
+};
+
+type SpeechRecognitionEventLike = {
+  results: ArrayLike<ArrayLike<SpeechRecognitionResultLike>>;
+};
+
+type SpeechRecognitionLike = {
+  lang: string;
+  interimResults: boolean;
+  continuous: boolean;
+  onstart: (() => void) | null;
+  onresult: ((event: SpeechRecognitionEventLike) => void) | null;
+  onerror: (() => void) | null;
+  onend: (() => void) | null;
+  start: () => void;
+  stop: () => void;
+};
+
+type SpeechRecognitionConstructor = new () => SpeechRecognitionLike;
+
+type WindowWithSpeechRecognition = Window & {
+  SpeechRecognition?: SpeechRecognitionConstructor;
+  webkitSpeechRecognition?: SpeechRecognitionConstructor;
+};
+
+type Entitlements = {
+  userHasAccount: boolean;
+  userPlan: string;
+  remainingReplies: number | null;
+  remainingSource?: "memory" | "cookie" | "init" | "unlimited";
+  capabilities: {
+    voice: boolean;
+    photos: boolean;
+    linksVisuals: boolean;
+  };
+  gating: {
+    must_prompt_signup_after_this: boolean;
+    must_prompt_payment_after_this: boolean;
+  };
+};
+
+const defaultEntitlements: Entitlements = {
+  userHasAccount: false,
+  userPlan: "none",
+  remainingReplies: null,
+  capabilities: { voice: false, photos: false, linksVisuals: false },
+  gating: {
+    must_prompt_signup_after_this: false,
+    must_prompt_payment_after_this: false,
+  },
+};
+
+type ActionItem = {
+  type: "link";
+  label: string;
+  href: string;
+  variant?: "primary" | "secondary";
+};
+
+type MessageActions = {
+  actions: ActionItem[];
+  gating?: {
+    blocked: boolean;
+    reason: string;
+  };
+};
+
+const EntitlementsContext = createContext<{
+  entitlements: Entitlements;
+  entitlementsSource: "init" | "api";
+  messageActions: MessageActions | null;
+  setEntitlements: (value: Entitlements, source?: "init" | "api") => void;
+  setMessageActions: (actions: MessageActions | null) => void;
+}>({
+  entitlements: defaultEntitlements,
+  entitlementsSource: "init",
+  messageActions: null,
+  setEntitlements: () => {},
+  setMessageActions: () => {},
+});
+
+const useEntitlements = () => useContext(EntitlementsContext);
 
 const extractText = (message: ThreadMessage) => {
   if (typeof message.content === "string") return message.content;
@@ -31,8 +125,12 @@ const buildPayloadMessages = (messages: readonly ThreadMessage[]) => {
     .filter((message) => message.content.length > 0);
 };
 
-const chatAdapter: ChatModelAdapter = {
+const createChatAdapter = (options?: {
+  onEntitlements?: (entitlements: Entitlements) => void;
+  onMessageActions?: (actions: MessageActions | null) => void;
+}): ChatModelAdapter => ({
   async *run({ messages, abortSignal }) {
+    options?.onMessageActions?.(null);
     const payload = buildPayloadMessages(messages);
     const lastUserMessage = [...payload]
       .reverse()
@@ -44,17 +142,42 @@ const chatAdapter: ChatModelAdapter = {
     const locale = lastUserMessage
       ? detectLanguageCode(lastUserMessage, fallbackLocale)
       : detectLanguageCode("", fallbackLocale);
+    const userCountry = getCountryFromLocale(fallbackLocale);
 
     try {
-      const response = await fetch("/api/chat", {
+      const response = await fetch("/api/ai", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: payload, locale }),
+        body: JSON.stringify({
+          messages: payload,
+          userCountry,
+          userLanguage: locale,
+          threadContext: "web-chat",
+        }),
         signal: abortSignal,
       });
 
       if (!response.ok || !response.body) {
-        throw new Error("Chat API error");
+        let errorMessage = "Chat API error";
+        try {
+          const errorPayload = (await response.json()) as {
+            error?: string;
+            entitlements?: Entitlements;
+            actions?: MessageActions;
+          };
+          if (errorPayload?.entitlements) {
+            options?.onEntitlements?.(errorPayload.entitlements);
+          }
+          if (errorPayload?.error) {
+            errorMessage = errorPayload.error;
+          }
+          if (errorPayload?.actions) {
+            options?.onMessageActions?.(errorPayload.actions);
+          }
+        } catch {
+          // ignore parse failures
+        }
+        throw new Error(errorMessage);
       }
 
       const reader = response.body.getReader();
@@ -83,6 +206,30 @@ const chatAdapter: ChatModelAdapter = {
             } else if (line.startsWith("data:")) {
               const value = line.slice(5).replace(/^ /, "");
               data = data ? `${data}\n${value}` : value;
+            }
+          }
+
+          if (eventName === "meta") {
+            try {
+              const payload = JSON.parse(data) as {
+                entitlements?: Entitlements;
+              };
+              if (payload.entitlements) {
+                options?.onEntitlements?.(payload.entitlements);
+              }
+            } catch {
+              continue;
+            }
+          }
+
+          if (eventName === "actions") {
+            try {
+              const payload = JSON.parse(data) as MessageActions;
+              if (payload?.actions?.length) {
+                options?.onMessageActions?.(payload);
+              }
+            } catch {
+              continue;
             }
           }
 
@@ -143,7 +290,10 @@ const chatAdapter: ChatModelAdapter = {
         content: [
           {
             type: "text",
-            text: "We could not reach the server. Please try again.",
+            text:
+              error instanceof Error
+                ? error.message
+                : "We could not reach the server. Please try again.",
           },
         ],
         status: { type: "incomplete", reason: "error", error: "api_error" },
@@ -151,7 +301,7 @@ const chatAdapter: ChatModelAdapter = {
       return;
     }
   },
-};
+});
 
 const detectLanguage = (text: string, fallback: string) => {
   const lower = text.toLowerCase();
@@ -171,6 +321,11 @@ const detectLanguage = (text: string, fallback: string) => {
 const detectLanguageCode = (text: string, fallback: string) => {
   const locale = detectLanguage(text, fallback);
   return locale.split("-")[0] || fallback;
+};
+
+const getCountryFromLocale = (locale: string) => {
+  const parts = locale.split("-");
+  return parts[1] || "unknown";
 };
 
 function CameraIcon() {
@@ -276,6 +431,7 @@ function AttachmentIcon() {
 }
 
 const ChatMessage = () => {
+  const { messageActions } = useEntitlements();
   const role = useAssistantState((state) => state.message.role);
   const isUser = role === "user";
   const status = useAssistantState((state) => state.message.status);
@@ -283,6 +439,15 @@ const ChatMessage = () => {
     role === "assistant" &&
     status?.type === "incomplete" &&
     status.reason === "error";
+  const isLastAssistant = useAssistantState((state) => {
+    const messages = state.thread.messages;
+    const lastAssistant = [...messages].reverse().find((message) => message.role === "assistant");
+    if (!lastAssistant) return false;
+    if ("id" in lastAssistant && "id" in state.message) {
+      return lastAssistant.id === (state.message as typeof lastAssistant).id;
+    }
+    return lastAssistant === state.message;
+  });
 
   return (
     <MessagePrimitive.Root className="px-4 py-2">
@@ -297,9 +462,30 @@ const ChatMessage = () => {
               : "border border-[var(--border)] bg-[var(--bg-elev)] text-[var(--text)] text-base"
             }`}
         >
-          <MessagePrimitive.Content className="text-left whitespace-pre-wrap" />
+          <div className="text-left whitespace-pre-wrap">
+            <MessagePrimitive.Content />
+          </div>
         </div>
       </div>
+      {!isUser && isLastAssistant && messageActions?.actions?.length ? (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {messageActions.actions.map((action) => {
+            const isPrimary = action.variant !== "secondary";
+            return (
+              <a
+                key={`${action.label}-${action.href}`}
+                href={action.href}
+                className={`inline-flex items-center justify-center rounded-full px-4 py-2 text-xs font-semibold transition ${isPrimary
+                  ? "bg-[var(--accent)] text-black hover:bg-[var(--accent-soft)]"
+                  : "border border-[var(--border)] text-white hover:border-white/40"
+                  }`}
+              >
+                {action.label}
+              </a>
+            );
+          })}
+        </div>
+      ) : null}
     </MessagePrimitive.Root>
   );
 };
@@ -344,6 +530,8 @@ type ComposerProps = {
   setSpeechEnabled: (value: boolean) => void;
   voiceGender: "female" | "male";
   setVoiceGender: (value: "female" | "male") => void;
+  canVoice: boolean;
+  canPhotos: boolean;
 };
 
 const Composer = ({
@@ -356,41 +544,38 @@ const Composer = ({
   setSpeechEnabled,
   voiceGender,
   setVoiceGender,
+  canVoice,
+  canPhotos,
 }: ComposerProps) => {
   const api = useAssistantApi();
   const isEmpty = useAssistantState((state) => state.composer.isEmpty);
   const isRunning = useAssistantState((state) => state.thread.isRunning);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const cameraInputRef = useRef<HTMLInputElement | null>(null);
-  const speechRef = useRef<any>(null);
+  const speechRef = useRef<SpeechRecognitionLike | null>(null);
   const baseTextRef = useRef<string>("");
   const shouldListenRef = useRef(false);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isListening, setIsListening] = useState(false);
   const [micError, setMicError] = useState<string | null>(null);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-
-  useEffect(() => {
-    if (!selectedFile) {
-      setPreviewUrl(null);
-      return;
-    }
-
-    if (selectedFile.type.startsWith("image/")) {
-      const url = URL.createObjectURL(selectedFile);
-      setPreviewUrl(url);
-      return () => URL.revokeObjectURL(url);
-    }
-
-    setPreviewUrl(null);
-    return undefined;
+  const previewUrl = useMemo(() => {
+    if (!selectedFile) return null;
+    if (!selectedFile.type.startsWith("image/")) return null;
+    return URL.createObjectURL(selectedFile);
   }, [selectedFile]);
 
+  useEffect(() => {
+    if (!previewUrl) return;
+    return () => URL.revokeObjectURL(previewUrl);
+  }, [previewUrl]);
+
   const handleCameraClick = () => {
+    if (!canPhotos) return;
     cameraInputRef.current?.click();
   };
 
   const handleAttachmentClick = () => {
+    if (!canPhotos) return;
     fileInputRef.current?.click();
   };
 
@@ -410,15 +595,14 @@ const Composer = ({
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    const SpeechRecognition =
-      (window as typeof window & { webkitSpeechRecognition?: any })
-        .SpeechRecognition ||
-      (window as typeof window & { webkitSpeechRecognition?: any })
-        .webkitSpeechRecognition;
+    const { SpeechRecognition, webkitSpeechRecognition } =
+      window as WindowWithSpeechRecognition;
+    const SpeechRecognitionConstructor =
+      SpeechRecognition || webkitSpeechRecognition;
 
-    if (!SpeechRecognition) return;
+    if (!SpeechRecognitionConstructor) return;
 
-    const recognition = new SpeechRecognition();
+    const recognition = new SpeechRecognitionConstructor();
     recognition.lang = navigator.language || "en-US";
     recognition.interimResults = true;
     recognition.continuous = true;
@@ -428,10 +612,12 @@ const Composer = ({
       setIsListening(true);
     };
 
-    recognition.onresult = (event: any) => {
+    recognition.onresult = (event: SpeechRecognitionEventLike) => {
       let transcript = "";
       for (let i = 0; i < event.results.length; i += 1) {
-        transcript += event.results[i][0]?.transcript ?? "";
+        const result = event.results[i];
+        const alternative = result?.[0];
+        transcript += alternative?.transcript ?? "";
       }
 
       const base = baseTextRef.current.trimEnd();
@@ -461,6 +647,7 @@ const Composer = ({
   }, [api]);
 
   const handleMicClick = () => {
+    if (!canVoice) return;
     const recognition = speechRef.current;
     if (!recognition) {
       setMicError("Voice input isn't supported in this browser.");
@@ -541,7 +728,8 @@ const Composer = ({
         <button
           type="button"
           onClick={handleCameraClick}
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[var(--muted)] transition hover:bg-[var(--surface)] hover:text-[var(--text)]"
+          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[var(--muted)] transition hover:bg-[var(--surface)] hover:text-[var(--text)] ${canPhotos ? "" : "cursor-not-allowed opacity-40 hover:bg-transparent"}`}
+          disabled={!canPhotos}
         >
           <CameraIcon />
         </button>
@@ -585,10 +773,13 @@ const Composer = ({
               <button
                 type="button"
                 onClick={() => {
-                  handleAttachmentClick();
-                  setIsMenuOpen(false);
+                  if (canPhotos) {
+                    handleAttachmentClick();
+                    setIsMenuOpen(false);
+                  }
                 }}
-                className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-[var(--text)] transition hover:bg-[var(--surface)]"
+                className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-[var(--text)] transition ${canPhotos ? "hover:bg-[var(--surface)]" : "cursor-not-allowed opacity-50"}`}
+                disabled={!canPhotos}
               >
                 <AttachmentIcon />
                 <span>Attach file</span>
@@ -596,8 +787,13 @@ const Composer = ({
 
               <button
                 type="button"
-                onClick={() => setSpeechEnabled(!speechEnabled)}
-                className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-[var(--text)] transition hover:bg-[var(--surface)]"
+                onClick={() => {
+                  if (canVoice) {
+                    setSpeechEnabled(!speechEnabled);
+                  }
+                }}
+                className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-[var(--text)] transition ${canVoice ? "hover:bg-[var(--surface)]" : "cursor-not-allowed opacity-50"}`}
+                disabled={!canVoice}
               >
                 <span className={speechEnabled ? "text-[var(--accent)]" : "text-[var(--muted)]"}>
                   {speechEnabled ? "Voice On" : "Voice Off"}
@@ -612,6 +808,7 @@ const Composer = ({
                   <button
                     type="button"
                     onClick={() => setVoiceGender("female")}
+                    disabled={!canVoice}
                     className={`flex-1 rounded-md py-1 text-xs font-medium transition ${voiceGender === "female"
                       ? "bg-[var(--bg-elev)] text-[var(--text)] shadow-sm"
                       : "text-[var(--muted)] hover:text-[var(--text)]"
@@ -622,6 +819,7 @@ const Composer = ({
                   <button
                     type="button"
                     onClick={() => setVoiceGender("male")}
+                    disabled={!canVoice}
                     className={`flex-1 rounded-md py-1 text-xs font-medium transition ${voiceGender === "male"
                       ? "bg-[var(--bg-elev)] text-[var(--text)] shadow-sm"
                       : "text-[var(--muted)] hover:text-[var(--text)]"
@@ -635,7 +833,7 @@ const Composer = ({
           )}
         </div>
 
-        <div className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--accent)] text-white transition hover:bg-[var(--accent-soft)]">
+        <div className={`relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--accent)] text-white transition ${canVoice ? "hover:bg-[var(--accent-soft)]" : "opacity-50"}`}>
           <button
             type="button"
             onClick={handleMicClick}
@@ -644,6 +842,7 @@ const Composer = ({
               ? ""
               : "group-data-[empty=false]/composer:scale-0 group-data-[empty=false]/composer:opacity-0"
               }`}
+            disabled={!canVoice}
           >
             {isListening ? <SquareIcon /> : <MicIcon />}
           </button>
@@ -666,6 +865,7 @@ const Composer = ({
         capture="environment"
         className="hidden"
         onChange={handleCameraChange}
+        disabled={!canPhotos}
       />
       <input
         ref={fileInputRef}
@@ -673,6 +873,7 @@ const Composer = ({
         accept="image/*,video/*,application/pdf,text/plain"
         className="hidden"
         onChange={handleAttachmentChange}
+        disabled={!canPhotos}
       />
     </ComposerPrimitive.Root>
   );
@@ -705,10 +906,97 @@ export default function GrokThread({
   const [selectedLanguage, setSelectedLanguage] = useState("auto");
   const [speechEnabled, setSpeechEnabled] = useState(true);
   const [voiceGender, setVoiceGender] = useState<"female" | "male">("female");
+  const [entitlements, setEntitlements] =
+    useState<Entitlements>(defaultEntitlements);
+  const [entitlementsSource, setEntitlementsSource] = useState<
+    "init" | "api"
+  >("init");
+  const [messageActions, setMessageActions] =
+    useState<MessageActions | null>(null);
+  const prevRemainingRef = useRef<number | null>(null);
+  const setEntitlementsWithSource = useCallback(
+    (value: Entitlements, source: "init" | "api" = "api") => {
+      setEntitlements(value);
+      setEntitlementsSource(source);
+    },
+    [],
+  );
+  const chatAdapter = useMemo(
+    () =>
+      createChatAdapter({
+        onEntitlements: (next) => setEntitlementsWithSource(next, "api"),
+        onMessageActions: setMessageActions,
+      }),
+    [setEntitlementsWithSource],
+  );
   const runtime = useLocalRuntime(chatAdapter);
 
+  useEffect(() => {
+    let isMounted = true;
+    fetch("/api/ai")
+      .then((response) => response.json())
+      .then((data) => {
+        if (!isMounted) return;
+        if (data?.entitlements) {
+          setEntitlementsWithSource(data.entitlements as Entitlements, "init");
+        }
+      })
+      .catch(() => {
+        // Ignore capability fetch errors; server will still enforce.
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!entitlements.capabilities.voice && speechEnabled) {
+      setSpeechEnabled(false);
+    }
+  }, [entitlements.capabilities.voice, speechEnabled]);
+
+  useEffect(() => {
+    if (!entitlements.capabilities.photos && selectedFile) {
+      setSelectedFile(null);
+    }
+  }, [entitlements.capabilities.photos, selectedFile]);
+
+  useEffect(() => {
+    if (process.env.NODE_ENV !== "development") return;
+    const sourceLabel = entitlementsSource === "api" ? "server response" : "init";
+      const remainingSource = entitlements.remainingSource ?? "unknown";
+      console.debug(
+        "[entitlements]",
+        `remaining=${String(entitlements.remainingReplies)} from ${sourceLabel}/${remainingSource}`,
+      );
+    if (
+      entitlementsSource === "api" &&
+      typeof entitlements.remainingReplies === "number" &&
+      prevRemainingRef.current !== null &&
+      entitlements.remainingReplies < prevRemainingRef.current
+    ) {
+      console.debug(
+        "[entitlements] decrement",
+        `from ${prevRemainingRef.current} to ${entitlements.remainingReplies}`,
+      );
+    }
+    if (typeof entitlements.remainingReplies === "number") {
+      prevRemainingRef.current = entitlements.remainingReplies;
+    }
+  }, [entitlements, entitlementsSource]);
+
   return (
-    <AssistantRuntimeProvider runtime={runtime}>
+    <EntitlementsContext.Provider
+      value={{
+        entitlements,
+        entitlementsSource,
+        messageActions,
+        setEntitlements: setEntitlementsWithSource,
+        setMessageActions,
+      }}
+    >
+      <AssistantRuntimeProvider runtime={runtime}>
       <ChatThreadContent
         onChatStart={onChatStart}
         selectedFile={selectedFile}
@@ -720,7 +1008,9 @@ export default function GrokThread({
         voiceGender={voiceGender}
         setVoiceGender={setVoiceGender}
       />
+      {process.env.NODE_ENV === "development" && <EntitlementsDebug />}
     </AssistantRuntimeProvider>
+    </EntitlementsContext.Provider>
   );
 }
 
@@ -745,6 +1035,7 @@ const ChatThreadContent = ({
   voiceGender: "female" | "male";
   setVoiceGender: (value: "female" | "male") => void;
 }) => {
+  const { entitlements } = useEntitlements();
   const lastUserText = useAssistantState((state) => {
     const messages = state.thread.messages;
     for (let i = messages.length - 1; i >= 0; i -= 1) {
@@ -801,7 +1092,7 @@ const ChatThreadContent = ({
     lastAssistantLengthRef.current = 0;
   };
 
-  const playNextAudio = () => {
+  const playNextAudio = useCallback(() => {
     if (ttsSpeakingRef.current) return;
     const audio = ttsPendingAudioRef.current.get(ttsNextPlayRef.current);
     if (!audio) return;
@@ -816,9 +1107,9 @@ const ChatThreadContent = ({
         ttsSpeakingRef.current = false;
         playNextAudio();
       });
-  };
+  }, []);
 
-  const enqueueTts = (text: string) => {
+  const enqueueTts = useCallback((text: string) => {
     const sequence = ttsSequenceRef.current;
     ttsSequenceRef.current += 1;
     const controller = new AbortController();
@@ -851,7 +1142,7 @@ const ChatThreadContent = ({
       .catch(() => {
         // Ignore TTS failures to avoid blocking chat.
       });
-  };
+  }, [playNextAudio, voiceGender]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -918,6 +1209,7 @@ const ChatThreadContent = ({
     speechEnabled,
     voiceGender,
     lastMessageRole,
+    enqueueTts,
   ]);
 
   return (
@@ -937,6 +1229,8 @@ const ChatThreadContent = ({
                 setSpeechEnabled={setSpeechEnabled}
                 voiceGender={voiceGender}
                 setVoiceGender={setVoiceGender}
+                canVoice={entitlements.capabilities.voice}
+                canPhotos={entitlements.capabilities.photos}
               />
             </div>
           </ThreadPrimitive.Empty>
@@ -957,6 +1251,8 @@ const ChatThreadContent = ({
               setSpeechEnabled={setSpeechEnabled}
               voiceGender={voiceGender}
               setVoiceGender={setVoiceGender}
+              canVoice={entitlements.capabilities.voice}
+              canPhotos={entitlements.capabilities.photos}
             />
           </ComposerContainer>
         </ThreadPrimitive.Root>
@@ -999,6 +1295,26 @@ const ChatShell = ({
         </button>
       )}
       {children}
+    </div>
+  );
+};
+
+const EntitlementsDebug = () => {
+  const { entitlements, entitlementsSource, messageActions } =
+    useEntitlements();
+  return (
+    <div className="fixed bottom-4 right-4 z-[70] rounded-xl border border-white/10 bg-black/70 px-4 py-3 text-xs text-white/80">
+      <div className="font-semibold text-white">Entitlements</div>
+      <div>source: {entitlementsSource}</div>
+      <div>plan: {entitlements.userPlan}</div>
+      <div>remaining: {String(entitlements.remainingReplies)}</div>
+      <div>remaining source: {entitlements.remainingSource ?? "unknown"}</div>
+      <div>
+        caps: v={entitlements.capabilities.voice ? "1" : "0"} p=
+        {entitlements.capabilities.photos ? "1" : "0"} l=
+        {entitlements.capabilities.linksVisuals ? "1" : "0"}
+      </div>
+      <div>actions: {messageActions?.actions?.length ?? 0}</div>
     </div>
   );
 };

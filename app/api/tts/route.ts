@@ -1,5 +1,6 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { getOpenAIClient } from "@/src/lib/openai";
+import { getEntitlements, toClientEntitlements } from "@/src/lib/entitlements";
 
 type TtsRequestBody = {
   text: string;
@@ -9,6 +10,17 @@ type TtsRequestBody = {
 const MAX_TTS_CHARS = 3000;
 
 export async function POST(req: Request) {
+  const entitlements = getEntitlements(req);
+  if (!entitlements.capabilities.voice) {
+    return NextResponse.json(
+      {
+        error: "Voice is not available on this plan.",
+        entitlements: toClientEntitlements(entitlements),
+      },
+      { status: 403 },
+    );
+  }
+
   let body: TtsRequestBody | null = null;
 
   try {

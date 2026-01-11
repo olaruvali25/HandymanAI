@@ -198,10 +198,7 @@ export async function POST(req: Request) {
           ],
         });
 
-        const draft =
-          draftResponse.output_text?.trim() ||
-          draftResponse.output?.[0]?.content?.[0]?.text?.trim() ||
-          "";
+        const draft = draftResponse.output_text?.trim() || "";
 
         const verifierInput = [
           "USER_MESSAGES:",

@@ -1,7 +1,8 @@
 import OpenAI from "openai";
+import { env } from "@/env";
 
 export const getOpenAIClient = () => {
-  const apiKey = process.env.OPENAI_API_KEY;
+  const apiKey = env.OPENAI_API_KEY;
 
   if (!apiKey) {
     throw new Error("Missing OPENAI_API_KEY");

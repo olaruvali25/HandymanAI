@@ -1,17 +1,26 @@
 import { NextResponse } from "next/server";
 import path from "path";
 import { readFile } from "fs/promises";
+import { fetchMutation, fetchQuery } from "convex/nextjs";
+import { api } from "@convex/_generated/api";
 import { getOpenAIClient } from "@/lib/openai";
 import { env } from "@/env";
 import {
   buildCookieHeader,
+  buildCounterCookieValue,
+  getConvexAuthToken,
   getEntitlements,
-  getMaxRepliesForPlan,
-  REMAINING_COOKIE,
+  normalizeStoredPlan,
+  parseCounterCookieValue,
+  PHOTO_COOKIE,
+  SESSION_COOKIE,
   THREAD_COOKIE,
   toClientEntitlements,
-  setRemainingForKey,
+  resolveEntitlements,
+  type StoredPlan,
 } from "@/lib/entitlements";
+import { randomUUID } from "crypto";
+import type { FunctionReference } from "convex/server";
 
 type IncomingMessage = {
   role: "user" | "assistant";
@@ -24,13 +33,90 @@ type AiRequestBody = {
   userLanguage?: string;
   threadContext?: string;
   threadId?: string;
+  attachments?: {
+    name: string;
+    type: string;
+    dataUrl: string;
+    size: number;
+  }[];
 };
 
 const MAX_MESSAGES = 50;
 const MAX_MESSAGE_LENGTH = 2000;
 const MAX_TOTAL_CHARS = 12000;
-const SCOPE_CACHE = new Map<string, { text: string; updatedAt: number }>();
-const BLOCKED_NOTICE = new Map<string, { limit?: boolean; mismatch?: boolean }>();
+const IS_DEV = process.env.NODE_ENV === "development";
+const STREAMING_DISABLED = process.env.FIXLY_DISABLE_STREAMING === "1";
+
+const CACHE_MAX_ENTRIES = 1000;
+const CACHE_TTL_MS = 1000 * 60 * 60 * 6;
+
+class BoundedMap<K, V> {
+  private map = new Map<K, { value: V; expiresAt: number }>();
+
+  constructor(
+    private readonly maxEntries: number,
+    private readonly ttlMs: number,
+  ) { }
+
+  private prune(now = Date.now()) {
+    for (const [key, entry] of this.map) {
+      if (entry.expiresAt <= now) {
+        this.map.delete(key);
+      }
+    }
+    if (this.map.size <= this.maxEntries) return;
+    const overflow = this.map.size - this.maxEntries;
+    let removed = 0;
+    for (const key of this.map.keys()) {
+      this.map.delete(key);
+      removed += 1;
+      if (removed >= overflow) break;
+    }
+  }
+
+  get(key: K): V | undefined {
+    this.prune();
+    const entry = this.map.get(key);
+    if (!entry) return undefined;
+    if (entry.expiresAt <= Date.now()) {
+      this.map.delete(key);
+      return undefined;
+    }
+    this.map.delete(key);
+    this.map.set(key, entry);
+    return entry.value;
+  }
+
+  has(key: K): boolean {
+    this.prune();
+    const entry = this.map.get(key);
+    if (!entry) return false;
+    if (entry.expiresAt <= Date.now()) {
+      this.map.delete(key);
+      return false;
+    }
+    return true;
+  }
+
+  set(key: K, value: V) {
+    this.map.set(key, { value, expiresAt: Date.now() + this.ttlMs });
+    this.prune();
+    return this;
+  }
+}
+
+const SCOPE_CACHE = new BoundedMap<
+  string,
+  { text: string; updatedAt: number }
+>(CACHE_MAX_ENTRIES, CACHE_TTL_MS);
+const BLOCKED_NOTICE = new BoundedMap<
+  string,
+  { limit?: boolean; mismatch?: boolean; photo?: boolean }
+>(CACHE_MAX_ENTRIES, CACHE_TTL_MS);
+const PHOTO_STORE = new BoundedMap<string, number>(
+  CACHE_MAX_ENTRIES,
+  CACHE_TTL_MS,
+);
 
 const serializeMessages = (messages: IncomingMessage[]) => {
   return messages
@@ -38,12 +124,16 @@ const serializeMessages = (messages: IncomingMessage[]) => {
     .join("\n");
 };
 
-const validatePayload = (body: AiRequestBody) => {
+const validatePayload = (body: AiRequestBody, hasAttachments: boolean) => {
   if (!body || !Array.isArray(body.messages)) {
     return "Invalid payload.";
   }
 
-  if (body.messages.length === 0 || body.messages.length > MAX_MESSAGES) {
+  if (body.messages.length === 0 && !hasAttachments) {
+    return "Invalid message count.";
+  }
+
+  if (body.messages.length > MAX_MESSAGES) {
     return "Invalid message count.";
   }
 
@@ -59,7 +149,11 @@ const validatePayload = (body: AiRequestBody) => {
     }
 
     const trimmed = message.content.trim();
-    if (trimmed.length === 0 || trimmed.length > MAX_MESSAGE_LENGTH) {
+    if (trimmed.length === 0) {
+      if (hasAttachments) continue;
+      return "Invalid message length.";
+    }
+    if (trimmed.length > MAX_MESSAGE_LENGTH) {
       return "Invalid message length.";
     }
 
@@ -70,6 +164,67 @@ const validatePayload = (body: AiRequestBody) => {
   }
 
   return null;
+};
+
+const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
+
+const sanitizeAttachments = (attachments?: AiRequestBody["attachments"]) => {
+  if (!attachments || attachments.length === 0) return [];
+  return attachments
+    .filter(
+      (attachment) =>
+        attachment &&
+        typeof attachment.dataUrl === "string" &&
+        attachment.dataUrl.startsWith("data:image/") &&
+        (attachment.size ?? 0) > 0 &&
+        (attachment.size ?? 0) <= MAX_ATTACHMENT_BYTES,
+    )
+    .map((attachment) => ({
+      name: attachment.name ?? "upload",
+      type: attachment.type ?? "",
+      dataUrl: attachment.dataUrl,
+      size: attachment.size ?? 0,
+    }));
+};
+
+const filesToAttachments = async (files: File[]) => {
+  const attachments = [];
+  for (const file of files) {
+    if (!file.type.startsWith("image/")) continue;
+    if (file.size <= 0 || file.size > MAX_ATTACHMENT_BYTES) continue;
+    const buffer = Buffer.from(await file.arrayBuffer());
+    const base64 = buffer.toString("base64");
+    attachments.push({
+      name: file.name,
+      type: file.type,
+      dataUrl: `data:${file.type};base64,${base64}`,
+      size: file.size,
+    });
+  }
+  return attachments;
+};
+
+const getPlanOverride = async (req: Request) => {
+  const token = getConvexAuthToken(req.headers.get("cookie"));
+  if (!token) return null;
+  try {
+    const user = await fetchQuery(api.users.me, {}, { token });
+    const plan =
+      (user as { plan?: StoredPlan | null } | null)?.plan ?? null;
+    return normalizeStoredPlan(plan);
+  } catch {
+    return null;
+  }
+};
+
+const getPhotoScope = (
+  userPlan: string,
+  userHasAccount: boolean,
+): "daily" | "thread" => {
+  if (userPlan === "small_fix" || userPlan === "none" || userPlan === "free") {
+    return "thread";
+  }
+  return userHasAccount ? "daily" : "thread";
 };
 
 const getPrompt = (filename: string) => {
@@ -103,36 +258,26 @@ const buildGatingResponse = (
   isRepeat?: boolean,
 ) => {
   if (reason === "plan_mismatch" && scope) {
-    const upgradeButtons = [
-      {
-        type: "link",
-        label: "Upgrade to Medium Fix",
-        href: "/pricing?highlight=medium_fix",
-        variant: "secondary",
-      },
-      {
-        type: "link",
-        label: "Upgrade to Big Fix",
-        href: "/pricing?highlight=big_fix",
-        variant: "primary",
-      },
-    ];
     return {
-      text: isRepeat
-        ? "Still happy to help — we just need the right Fix pack to keep going.\nPick Medium or Big and I will continue."
-        : scope === "medium"
-          ? "This looks bigger than a Small Fix.\nI can still guide you to the finish — you will need a Medium Fix to continue."
-          : "This looks bigger than your current Fix.\nI can still guide you to the finish — you will need a Medium or Big Fix to continue.",
+      text:
+        "This looks like a bigger fix - upgrade so I can guide you fully.",
       gating: { blocked: true, reason: "plan_mismatch" },
-      actions: upgradeButtons,
+      actions: [
+        {
+          type: "link",
+          label: "Upgrade",
+          href: "/pricing",
+          variant: "primary",
+        },
+      ],
     };
   }
 
   if (userPlan === "none") {
     return {
       text: isRepeat
-        ? "I am ready when you are.\nPlease sign up or log in so I can keep guiding you."
-        : "Got you — we can fix this.\nQuick thing: create an account so I can keep guiding you step-by-step.",
+        ? "I cant continue until you create an account."
+        : "Were close  create an account to continue so I can keep guiding you.",
       gating: { blocked: true, reason: "signup" },
       actions: [
         {
@@ -152,17 +297,77 @@ const buildGatingResponse = (
   }
 
   return {
-    text: isRepeat
-      ? "I can keep going as soon as you pick a Fix pack."
-      : "We are close.\nTo keep going and finish this properly, grab a Fix pack.",
+    text:
+      "Want me to guide you step-by-step (voice + photos)? Grab a Fix and well finish this.",
     gating: { blocked: true, reason: "payment" },
     actions: [
       {
         type: "link",
-        label: "Choose a Fix",
+        label: "Get a Fix",
         href: "/pricing",
         variant: "primary",
       },
+    ],
+  };
+};
+
+const buildLimitResponse = (userHasAccount: boolean) => {
+  if (!userHasAccount) {
+    return {
+      text: "Your issue is about to be fixed, but to keep guiding you, log-in or sign-up to continue.",
+      actions: [
+        { type: "link", label: "Log in", href: "/login", variant: "secondary" },
+        { type: "link", label: "Sign up", href: "/signup", variant: "primary" },
+      ],
+      gating: { blocked: true, reason: "limit" },
+    };
+  }
+
+  return {
+    text: "Got it, we'll solve this issue in a few moments, but first let's get you set up with a Fix so we can continue.",
+    actions: [
+      { type: "link", label: "Get a Fix", href: "/pricing", variant: "primary" },
+    ],
+    gating: { blocked: true, reason: "limit" },
+  };
+};
+
+const buildPhotoLimitResponse = (userPlan: string, isRepeat?: boolean) => {
+  const baseText = isRepeat
+    ? "This feature is included in Medium/Big/Pro. Upgrade to continue."
+    : "This feature is included in Medium/Big/Pro. Upgrade to continue.";
+
+  if (userPlan === "none") {
+    return {
+      text: "This feature is included in Medium/Big/Pro. Create an account to continue.",
+      gating: { blocked: true, reason: "photo_limit" },
+      actions: [
+        { type: "link", label: "Sign up", href: "/signup", variant: "primary" },
+        { type: "link", label: "Log in", href: "/login", variant: "secondary" },
+      ],
+    };
+  }
+
+  if (userPlan === "small_fix") {
+    return {
+      text: baseText,
+      gating: { blocked: true, reason: "photo_limit" },
+      actions: [
+        {
+          type: "link",
+          label: "Upgrade",
+          href: "/pricing",
+          variant: "primary",
+        },
+      ],
+    };
+  }
+
+  return {
+    text: baseText,
+    gating: { blocked: true, reason: "photo_limit" },
+    actions: [
+      { type: "link", label: "Upgrade", href: "/pricing", variant: "primary" },
     ],
   };
 };
@@ -224,6 +429,7 @@ const applyGatingIfNeeded = (
   }
 
   entitlements.capabilities = {
+    ...entitlements.capabilities,
     voice: false,
     photos: false,
     linksVisuals: false,
@@ -232,12 +438,116 @@ const applyGatingIfNeeded = (
   return entitlements;
 };
 
+const logEvent = (message: string, data?: Record<string, unknown>) => {
+  if (!IS_DEV) return;
+  if (data) {
+    console.debug(message, data);
+  } else {
+    console.debug(message);
+  }
+};
+
+const CONVEX_TIMEOUT_MS = 5000;
+
+const withTimeout = async <T>(
+  promise: Promise<T>,
+  ms = CONVEX_TIMEOUT_MS,
+) => {
+  let timer: NodeJS.Timeout | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timer = setTimeout(() => reject(new Error("Convex timeout")), ms);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+};
+
+type MessageCountQuery = FunctionReference<
+  "query",
+  "public",
+  { sessionId?: string },
+  number
+>;
+type MessageCountMutation = FunctionReference<
+  "mutation",
+  "public",
+  { sessionId?: string },
+  number
+>;
+
+const entitlementsApi = api as unknown as {
+  entitlements: {
+    getMessageCount: MessageCountQuery;
+    incrementMessageCount: MessageCountMutation;
+  };
+};
+
+const getMessageCount = async (
+  sessionId: string | null,
+  token: string | null,
+) => {
+  return withTimeout(
+    fetchQuery(
+      entitlementsApi.entitlements.getMessageCount,
+      { sessionId: sessionId ?? undefined },
+      token ? { token } : {},
+    ),
+  );
+};
+
+const incrementMessageCount = async (
+  sessionId: string | null,
+  token: string | null,
+) => {
+  return withTimeout(
+    fetchMutation(
+      entitlementsApi.entitlements.incrementMessageCount,
+      { sessionId: sessionId ?? undefined },
+      token ? { token } : {},
+    ),
+  );
+};
+
 export async function GET(req: Request) {
-  const entitlements = getEntitlements(req);
+  logEvent("[ai] GET /api/ai start");
+  const planOverride = await getPlanOverride(req);
+  const entitlements = getEntitlements(req, {
+    planOverride: planOverride ?? undefined,
+  });
+  const cookieHeader = req.headers.get("cookie");
+  const token = getConvexAuthToken(cookieHeader);
+  let sessionId = entitlements.sessionId;
+  let shouldSetSessionCookie = false;
+  if (!entitlements.userHasAccount && !sessionId) {
+    sessionId = randomUUID();
+    shouldSetSessionCookie = true;
+  }
+  try {
+    const messageCount = await getMessageCount(sessionId, token);
+    const resolved = resolveEntitlements({
+      isAnonymous: !entitlements.userHasAccount,
+      plan: entitlements.userPlan,
+      messageCount,
+    });
+
+    entitlements.userPlan = resolved.userPlan;
+    entitlements.capabilities = resolved.capabilities;
+    entitlements.remainingReplies = resolved.remainingMessages;
+    entitlements.remainingSource = "server";
+    entitlements.sessionId = sessionId;
+  } catch (error) {
+    console.error("[ai] entitlements init error:", error);
+  }
+
   const clientEntitlements = applyGatingIfNeeded(
     toClientEntitlements(entitlements),
   );
   const res = NextResponse.json({ entitlements: clientEntitlements });
+  res.headers.set("X-User-Has-Account", entitlements.userHasAccount ? "1" : "0");
 
   if (!entitlements.cookies[THREAD_COOKIE] && entitlements.threadId) {
     res.headers.append(
@@ -246,13 +556,10 @@ export async function GET(req: Request) {
     );
   }
 
-  if (
-    !entitlements.cookies[REMAINING_COOKIE] &&
-    entitlements.remainingReplies !== null
-  ) {
+  if (shouldSetSessionCookie && sessionId) {
     res.headers.append(
       "Set-Cookie",
-      buildCookieHeader(REMAINING_COOKIE, String(entitlements.remainingReplies)),
+      buildCookieHeader(SESSION_COOKIE, sessionId),
     );
   }
 
@@ -260,42 +567,152 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
+  logEvent("[ai] POST /api/ai start", { streamingDisabled: STREAMING_DISABLED });
   let body: AiRequestBody | null = null;
+  let attachmentsFromForm: AiRequestBody["attachments"] = [];
+  const contentType = req.headers.get("content-type") ?? "";
 
-  try {
-    body = (await req.json()) as AiRequestBody;
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON." }, { status: 400 });
+  if (contentType.includes("multipart/form-data")) {
+    try {
+      const form = await req.formData();
+      const rawPayload =
+        form.get("payload") ??
+        form.get("messages");
+      if (typeof rawPayload === "string") {
+        try {
+          const parsed = JSON.parse(rawPayload) as AiRequestBody | IncomingMessage[];
+          if (Array.isArray(parsed)) {
+            body = { messages: parsed };
+          } else {
+            body = parsed;
+          }
+        } catch {
+          body = null;
+        }
+      }
+      if (!body) {
+        const message = form.get("message");
+        body = {
+          messages:
+            typeof message === "string"
+              ? [{ role: "user", content: message }]
+              : [],
+          userCountry:
+            typeof form.get("userCountry") === "string"
+              ? (form.get("userCountry") as string)
+              : undefined,
+          userLanguage:
+            typeof form.get("userLanguage") === "string"
+              ? (form.get("userLanguage") as string)
+              : undefined,
+          threadContext:
+            typeof form.get("threadContext") === "string"
+              ? (form.get("threadContext") as string)
+              : undefined,
+        };
+      }
+      const files = form
+        .getAll("files")
+        .concat(form.getAll("attachments"))
+        .filter((item): item is File => item instanceof File);
+      if (files.length > 0) {
+        attachmentsFromForm = await filesToAttachments(files);
+      }
+    } catch {
+      return NextResponse.json({ error: "Invalid form data." }, { status: 400 });
+    }
+  } else {
+    try {
+      body = (await req.json()) as AiRequestBody;
+    } catch {
+      return NextResponse.json({ error: "Invalid JSON." }, { status: 400 });
+    }
   }
 
-  const validationError = body ? validatePayload(body) : "Invalid payload.";
+  const validationError = body
+    ? validatePayload(
+      body,
+      attachmentsFromForm.length > 0 || (body.attachments?.length ?? 0) > 0,
+    )
+    : "Invalid payload.";
   if (validationError) {
     return NextResponse.json({ error: validationError }, { status: 400 });
   }
 
-  if (!env.OPENAI_API_KEY) {
+  const planOverride = await getPlanOverride(req);
+  const entitlements = getEntitlements(req, {
+    planOverride: planOverride ?? undefined,
+  });
+  const cookieHeader = req.headers.get("cookie");
+  const token = getConvexAuthToken(cookieHeader);
+  let sessionId = entitlements.sessionId;
+  let shouldSetSessionCookie = false;
+  if (!sessionId && !token) {
+    sessionId = randomUUID();
+    shouldSetSessionCookie = true;
+  }
+  let resolved;
+  try {
+    const messageCount = await incrementMessageCount(sessionId, token);
+    resolved = resolveEntitlements({
+      isAnonymous: !entitlements.userHasAccount,
+      plan: entitlements.userPlan,
+      messageCount,
+    });
+    entitlements.userPlan = resolved.userPlan;
+    entitlements.capabilities = resolved.capabilities;
+    entitlements.remainingReplies = resolved.remainingMessages;
+    entitlements.remainingSource = "server";
+    entitlements.sessionId = sessionId;
+  } catch (error) {
+    console.error("[ai] entitlements error:", error);
     return NextResponse.json(
-      { error: "Missing OPENAI_API_KEY." },
-      { status: 500 },
+      { error: "Unable to reach usage service. Please try again." },
+      { status: 503 },
     );
   }
 
-  const entitlements = getEntitlements(req);
-  const maxReplies = getMaxRepliesForPlan(entitlements.userPlan);
-  const clientEntitlements = toClientEntitlements(entitlements);
-
-  if (entitlements.remainingReplies !== null && entitlements.remainingReplies <= 0) {
-    const limitKey = `limit:${entitlements.remainingKey}`;
-    const isRepeat = Boolean(BLOCKED_NOTICE.get(limitKey)?.limit);
-    const gated = applyGatingIfNeeded(clientEntitlements);
-    const { text, actions, gating } = buildGatingResponse(
-      gated.userPlan,
-      "limit",
-      null,
-      isRepeat,
-    );
-    BLOCKED_NOTICE.set(limitKey, { limit: true });
+  if (!resolved.canChat) {
+    const gated = applyGatingIfNeeded(toClientEntitlements(entitlements));
+    const limitNoticeKey = `limit:${entitlements.userHasAccount ? "user" : "anon"}:${entitlements.sessionId ?? entitlements.threadId}`;
+    const isRepeat = Boolean(BLOCKED_NOTICE.get(limitNoticeKey)?.limit);
+    const response = isRepeat
+      ? {
+          text: "You're still at the limit. Use the button above to continue.",
+          actions: [] as Array<{
+            type: "link";
+            label: string;
+            href: string;
+            variant?: "primary" | "secondary";
+          }>,
+          gating: { blocked: true, reason: "limit" as const },
+        }
+      : buildLimitResponse(entitlements.userHasAccount);
+    if (!isRepeat) {
+      BLOCKED_NOTICE.set(limitNoticeKey, { limit: true });
+    }
+    const { text, actions, gating } = response;
     const encoder = new TextEncoder();
+    const headers = new Headers({
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache, no-transform",
+      Connection: "keep-alive",
+    });
+
+    if (!entitlements.cookies[THREAD_COOKIE] && entitlements.threadId) {
+      headers.append(
+        "Set-Cookie",
+        buildCookieHeader(THREAD_COOKIE, entitlements.threadId),
+      );
+    }
+    if (shouldSetSessionCookie && sessionId) {
+      headers.append(
+        "Set-Cookie",
+        buildCookieHeader(SESSION_COOKIE, sessionId),
+      );
+    }
+
+    logEvent("[ai] response limit", { userHasAccount: entitlements.userHasAccount });
     const stream = new ReadableStream({
       start(controller) {
         const sendEvent = (event: string, data: object) => {
@@ -306,6 +723,137 @@ export async function POST(req: Request) {
           );
         };
         sendEvent("meta", { entitlements: gated });
+        if (actions?.length) {
+          sendEvent("actions", { actions, gating });
+        }
+        sendEvent("delta", { text });
+        sendEvent("done", {});
+        controller.close();
+      },
+    });
+
+    if (STREAMING_DISABLED) {
+      const res = NextResponse.json({
+        text,
+        entitlements: gated,
+        actions: actions?.length ? actions : undefined,
+        gating,
+      });
+      headers.forEach((value, key) => res.headers.append(key, value));
+      return res;
+    }
+
+    return new Response(stream, { headers });
+  }
+
+  if (!env.OPENAI_API_KEY) {
+    return NextResponse.json(
+      { error: "Missing OPENAI_API_KEY." },
+      { status: 500 },
+    );
+  }
+
+  const clientEntitlements = applyGatingIfNeeded(
+    toClientEntitlements(entitlements),
+  );
+  const attachments =
+    attachmentsFromForm.length > 0
+      ? sanitizeAttachments(attachmentsFromForm)
+      : sanitizeAttachments(body.attachments);
+  const baseModel = env.OPENAI_MODEL ?? "gpt-5.2";
+  const model =
+    attachments.length > 0 && !/gpt-4|4o/i.test(baseModel)
+      ? "gpt-4o-mini"
+      : baseModel;
+  if (process.env.NODE_ENV === "development") {
+    console.debug("[ai] attachments", {
+      count: attachments.length,
+      types: attachments.map((attachment) => attachment.type),
+      sizes: attachments.map((attachment) => attachment.size),
+    });
+    console.debug("[ai] vision model", {
+      model,
+      hasAttachments: attachments.length > 0,
+    });
+  }
+  const remainingMode = entitlements.userHasAccount ? "account" : "anon";
+  const photoLimit = entitlements.capabilities.photoLimit;
+  const photoScope =
+    photoLimit === null
+      ? null
+      : getPhotoScope(entitlements.userPlan, entitlements.userHasAccount);
+  const photoKey =
+    photoScope === "daily"
+      ? `photo:${entitlements.remainingKey}`
+      : photoScope === "thread"
+        ? `photo:thread:${entitlements.threadId}`
+        : null;
+  const storedPhoto =
+    photoKey && PHOTO_STORE.has(photoKey) ? PHOTO_STORE.get(photoKey) : undefined;
+  const cookiePhoto =
+    photoKey && photoScope
+      ? parseCounterCookieValue(
+        entitlements.cookies[PHOTO_COOKIE],
+        photoScope,
+        entitlements.threadId,
+        remainingMode,
+      )
+      : Number.NaN;
+  const photoUsed = Number.isFinite(storedPhoto)
+    ? (storedPhoto as number)
+    : Number.isFinite(cookiePhoto)
+      ? (cookiePhoto as number)
+      : 0;
+  let nextPhotoCount: number | null = null;
+
+  if (process.env.NODE_ENV === "development") {
+    console.debug("[ai] entitlements", {
+      userHasAccount: entitlements.userHasAccount,
+      plan: entitlements.userPlan,
+      remaining: entitlements.remainingReplies,
+      threadId: entitlements.threadId,
+      photoUsed,
+      photoLimit,
+    });
+  }
+
+  if (attachments.length > 0 && !entitlements.capabilities.photos) {
+    const photoNoticeKey = `photo:blocked:${entitlements.remainingKey}`;
+    const isRepeat = Boolean(BLOCKED_NOTICE.get(photoNoticeKey)?.photo);
+    const { text, actions, gating } = buildPhotoLimitResponse(
+      entitlements.userPlan,
+      isRepeat,
+    );
+    BLOCKED_NOTICE.set(photoNoticeKey, { photo: true });
+    const encoder = new TextEncoder();
+    const headers = new Headers({
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache, no-transform",
+      Connection: "keep-alive",
+    });
+    if (!entitlements.cookies[THREAD_COOKIE] && entitlements.threadId) {
+      headers.append(
+        "Set-Cookie",
+        buildCookieHeader(THREAD_COOKIE, entitlements.threadId),
+      );
+    }
+    if (shouldSetSessionCookie && sessionId) {
+      headers.append(
+        "Set-Cookie",
+        buildCookieHeader(SESSION_COOKIE, sessionId),
+      );
+    }
+    logEvent("[ai] response photo blocked");
+    const stream = new ReadableStream({
+      start(controller) {
+        const sendEvent = (event: string, data: object) => {
+          controller.enqueue(
+            encoder.encode(
+              `event: ${event}\n` + `data: ${JSON.stringify(data)}\n\n`,
+            ),
+          );
+        };
+        sendEvent("meta", { entitlements: clientEntitlements });
         sendEvent("actions", { actions, gating });
         sendEvent("delta", { text });
         sendEvent("done", {});
@@ -313,13 +861,89 @@ export async function POST(req: Request) {
       },
     });
 
-    return new Response(stream, {
-      headers: {
+    if (STREAMING_DISABLED) {
+      const res = NextResponse.json({
+        text,
+        entitlements: clientEntitlements,
+        actions,
+        gating,
+      });
+      headers.forEach((value, key) => res.headers.append(key, value));
+      return res;
+    }
+
+    return new Response(stream, { headers });
+  }
+
+  if (photoLimit !== null && attachments.length > 0 && photoKey && photoScope) {
+    const nextPhoto = photoUsed + attachments.length;
+    if (nextPhoto > photoLimit) {
+      const photoNoticeKey = `photo:${photoKey}`;
+      const isRepeat = Boolean(BLOCKED_NOTICE.get(photoNoticeKey)?.photo);
+      const { text, actions, gating } = buildPhotoLimitResponse(
+        entitlements.userPlan,
+        isRepeat,
+      );
+      BLOCKED_NOTICE.set(photoNoticeKey, { photo: true });
+      if (process.env.NODE_ENV === "development") {
+        console.debug("[ai] gate:photo_limit", {
+          plan: entitlements.userPlan,
+          threadId: entitlements.threadId,
+          photoUsed,
+          photoLimit,
+        });
+      }
+      const encoder = new TextEncoder();
+      const headers = new Headers({
         "Content-Type": "text/event-stream",
         "Cache-Control": "no-cache, no-transform",
         Connection: "keep-alive",
-      },
-    });
+      });
+      if (!entitlements.cookies[THREAD_COOKIE] && entitlements.threadId) {
+        headers.append(
+          "Set-Cookie",
+          buildCookieHeader(THREAD_COOKIE, entitlements.threadId),
+        );
+      }
+      if (shouldSetSessionCookie && sessionId) {
+        headers.append(
+          "Set-Cookie",
+          buildCookieHeader(SESSION_COOKIE, sessionId),
+        );
+      }
+      logEvent("[ai] response photo limit");
+      const stream = new ReadableStream({
+        start(controller) {
+          const sendEvent = (event: string, data: object) => {
+            controller.enqueue(
+              encoder.encode(
+                `event: ${event}\n` + `data: ${JSON.stringify(data)}\n\n`,
+              ),
+            );
+          };
+          sendEvent("meta", { entitlements: clientEntitlements });
+          sendEvent("actions", { actions, gating });
+          sendEvent("delta", { text });
+          sendEvent("done", {});
+          controller.close();
+        },
+      });
+
+      if (STREAMING_DISABLED) {
+        const res = NextResponse.json({
+          text,
+          entitlements: clientEntitlements,
+          actions,
+          gating,
+        });
+        headers.forEach((value, key) => res.headers.append(key, value));
+        return res;
+      }
+
+      return new Response(stream, { headers });
+    }
+    nextPhotoCount = nextPhoto;
+    PHOTO_STORE.set(photoKey, nextPhoto);
   }
 
   const planLabel = entitlements.userPlan;
@@ -334,7 +958,6 @@ export async function POST(req: Request) {
     getPrompt("primary.txt"),
   ]);
 
-  const model = env.OPENAI_MODEL ?? "gpt-5.2";
   const openai = getOpenAIClient();
   const encoder = new TextEncoder();
 
@@ -344,7 +967,7 @@ export async function POST(req: Request) {
     Connection: "keep-alive",
   });
 
-  if (maxReplies !== null && entitlements.remainingReplies !== null) {
+  if (entitlements.remainingReplies !== null) {
     headers.set("X-Remaining", String(entitlements.remainingReplies));
   }
 
@@ -355,23 +978,176 @@ export async function POST(req: Request) {
     );
   }
 
-  if (
-    !entitlements.cookies[REMAINING_COOKIE] &&
-    entitlements.remainingReplies !== null
-  ) {
+  if (shouldSetSessionCookie && sessionId) {
     headers.append(
       "Set-Cookie",
-      buildCookieHeader(REMAINING_COOKIE, String(entitlements.remainingReplies)),
+      buildCookieHeader(SESSION_COOKIE, sessionId),
+    );
+  }
+
+  if (nextPhotoCount !== null && photoScope) {
+    headers.append(
+      "Set-Cookie",
+      buildCookieHeader(
+        PHOTO_COOKIE,
+        buildCounterCookieValue(
+          nextPhotoCount,
+          photoScope,
+          entitlements.threadId,
+          remainingMode,
+        ),
+      ),
     );
   }
 
   headers.set("X-Plan", planLabel);
+  headers.set("X-User-Has-Account", entitlements.userHasAccount ? "1" : "0");
   headers.set("X-Can-Voice", entitlements.capabilities.voice ? "1" : "0");
   headers.set("X-Can-Photos", entitlements.capabilities.photos ? "1" : "0");
   headers.set(
     "X-Can-Links",
     entitlements.capabilities.linksVisuals ? "1" : "0",
   );
+
+  const applyHeaders = (res: NextResponse) => {
+    headers.forEach((value, key) => {
+      res.headers.append(key, value);
+    });
+    return res;
+  };
+
+  if (STREAMING_DISABLED) {
+    try {
+      const lastUserMessage =
+        [...body!.messages].reverse().find((m) => m.role === "user")?.content ??
+        "";
+      const shouldRecomputeScope =
+        !entitlements.threadId ||
+        hasScopeCues(lastUserMessage) ||
+        !SCOPE_CACHE.has(entitlements.threadId);
+      let scopeText = "";
+
+      const scopeStart = Date.now();
+      logEvent("[ai] scope-control start");
+      if (shouldRecomputeScope) {
+        const scopeInput = [
+          `USER_PLAN: ${entitlements.userPlan}`,
+          `USER_HAS_ACCOUNT: ${entitlements.userHasAccount ? "yes" : "no"}`,
+          `USER_COUNTRY: ${body!.userCountry ?? "unknown"}`,
+          `USER_LANGUAGE: ${body!.userLanguage ?? "unknown"}`,
+          `THREAD_CONTEXT: ${body!.threadContext ?? "unknown"}`,
+          `CAPABILITIES: voice=${entitlements.capabilities.voice ? "yes" : "no"}, photos=${entitlements.capabilities.photos ? "yes" : "no"}, linksVisuals=${entitlements.capabilities.linksVisuals ? "yes" : "no"}`,
+          "MESSAGES:",
+          serializeMessages(body!.messages),
+        ].join("\n");
+
+        const scopeResponse = await openai.responses.create({
+          model,
+          input: [
+            { role: "system", content: scopePrompt.trim() },
+            { role: "user", content: scopeInput },
+          ],
+        });
+
+        scopeText = getResponseOutputText(scopeResponse);
+
+        if (entitlements.threadId) {
+          SCOPE_CACHE.set(entitlements.threadId, {
+            text: scopeText,
+            updatedAt: Date.now(),
+          });
+        }
+      } else if (entitlements.threadId) {
+        scopeText = SCOPE_CACHE.get(entitlements.threadId)?.text ?? "";
+      }
+      logEvent("[ai] scope-control end", {
+        ms: Date.now() - scopeStart,
+        cached: !shouldRecomputeScope,
+      });
+      logEvent("[ai] verifier start");
+      logEvent("[ai] verifier end", { ms: 0 });
+
+      const scopeClassification = parseScopeFromText(scopeText);
+      if (
+        (entitlements.userPlan === "small_fix" &&
+          (scopeClassification === "medium" || scopeClassification === "big")) ||
+        (entitlements.userPlan === "medium_fix" && scopeClassification === "big")
+      ) {
+        const mismatchKey = `mismatch:${entitlements.remainingKey}`;
+        const isRepeat = Boolean(BLOCKED_NOTICE.get(mismatchKey)?.mismatch);
+        const { text, actions, gating } = buildGatingResponse(
+          entitlements.userPlan,
+          "plan_mismatch",
+          scopeClassification,
+          isRepeat,
+        );
+        BLOCKED_NOTICE.set(mismatchKey, { mismatch: true });
+        logEvent("[ai] response plan mismatch");
+        return applyHeaders(
+          NextResponse.json({
+            text,
+            entitlements: clientEntitlements,
+            actions,
+            gating,
+          }),
+        );
+      }
+
+      logEvent("[ai] primary start");
+      const primaryStart = Date.now();
+      const primaryInput = [
+        "SCOPE_CONTROL:",
+        scopeText,
+        "CAPABILITIES:",
+        `voice=${entitlements.capabilities.voice ? "yes" : "no"}`,
+        `photos=${entitlements.capabilities.photos ? "yes" : "no"}`,
+        `linksVisuals=${entitlements.capabilities.linksVisuals ? "yes" : "no"}`,
+        attachments.length > 0
+          ? `ATTACHMENTS: ${attachments.length} image(s) included.`
+          : null,
+        "MESSAGES:",
+        serializeMessages(body!.messages),
+      ]
+        .filter(Boolean)
+        .join("\n");
+
+      const primaryContent: Array<
+        | { type: "input_text"; text: string }
+        | { type: "input_image"; image_url: string; detail: "auto" }
+      > = [
+        { type: "input_text", text: primaryInput },
+        ...attachments.map((attachment) => ({
+          type: "input_image" as const,
+          image_url: attachment.dataUrl,
+          detail: "auto" as const,
+        })),
+      ];
+
+      const primaryResponse = await openai.responses.create({
+        model,
+        input: [
+          { role: "system", content: primaryPrompt.trim() },
+          { role: "user", content: primaryContent },
+        ],
+      });
+      const outputText = getResponseOutputText(primaryResponse);
+      logEvent("[ai] primary end", { ms: Date.now() - primaryStart });
+      logEvent("[ai] response json");
+
+      return applyHeaders(
+        NextResponse.json({
+          text: outputText,
+          entitlements: clientEntitlements,
+        }),
+      );
+    } catch (error) {
+      console.error("AI route error:", error);
+      return NextResponse.json(
+        { error: "Failed to generate response." },
+        { status: 500 },
+      );
+    }
+  }
 
   const stream = new ReadableStream({
     async start(controller) {
@@ -396,8 +1172,8 @@ export async function POST(req: Request) {
         let scopeText = "";
 
         const scopeStart = Date.now();
+        logEvent("[ai] scope-control start");
         if (shouldRecomputeScope) {
-          console.log("RUN scope-control");
           const scopeInput = [
             `USER_PLAN: ${entitlements.userPlan}`,
             `USER_HAS_ACCOUNT: ${entitlements.userHasAccount ? "yes" : "no"}`,
@@ -426,10 +1202,14 @@ export async function POST(req: Request) {
             });
           }
         } else if (entitlements.threadId) {
-          console.log("RUN scope-control (cached)");
           scopeText = SCOPE_CACHE.get(entitlements.threadId)?.text ?? "";
         }
-        console.log(`scope-control time ${Date.now() - scopeStart}ms`);
+        logEvent("[ai] scope-control end", {
+          ms: Date.now() - scopeStart,
+          cached: !shouldRecomputeScope,
+        });
+        logEvent("[ai] verifier start");
+        logEvent("[ai] verifier end", { ms: 0 });
 
         const scopeClassification = parseScopeFromText(scopeText);
         if (
@@ -447,6 +1227,18 @@ export async function POST(req: Request) {
             isRepeat,
           );
           BLOCKED_NOTICE.set(mismatchKey, { mismatch: true });
+          logEvent("[ai] response plan mismatch", {
+            plan: entitlements.userPlan,
+            scope: scopeClassification,
+            threadId: entitlements.threadId,
+          });
+          if (process.env.NODE_ENV === "development") {
+            console.debug("[ai] gate:plan_mismatch", {
+              plan: entitlements.userPlan,
+              scope: scopeClassification,
+              threadId: entitlements.threadId,
+            });
+          }
           sendEvent("actions", { actions, gating });
           sendEvent("delta", { text });
           sendEvent("done", {});
@@ -454,7 +1246,7 @@ export async function POST(req: Request) {
           return;
         }
 
-        console.log("RUN primary");
+        logEvent("[ai] primary start");
         const primaryStart = Date.now();
         const primaryInput = [
           "SCOPE_CONTROL:",
@@ -463,16 +1255,33 @@ export async function POST(req: Request) {
           `voice=${entitlements.capabilities.voice ? "yes" : "no"}`,
           `photos=${entitlements.capabilities.photos ? "yes" : "no"}`,
           `linksVisuals=${entitlements.capabilities.linksVisuals ? "yes" : "no"}`,
+          attachments.length > 0
+            ? `ATTACHMENTS: ${attachments.length} image(s) included.`
+            : null,
           "MESSAGES:",
           serializeMessages(body!.messages),
-        ].join("\n");
+        ]
+          .filter(Boolean)
+          .join("\n");
+
+        const primaryContent: Array<
+          | { type: "input_text"; text: string }
+          | { type: "input_image"; image_url: string; detail: "auto" }
+        > = [
+            { type: "input_text", text: primaryInput },
+            ...attachments.map((attachment) => ({
+              type: "input_image" as const,
+              image_url: attachment.dataUrl,
+              detail: "auto" as const,
+            })),
+          ];
 
         const primaryStream = await openai.responses.create({
           model,
           stream: true,
           input: [
             { role: "system", content: primaryPrompt.trim() },
-            { role: "user", content: primaryInput },
+            { role: "user", content: primaryContent },
           ],
         });
 
@@ -488,25 +1297,16 @@ export async function POST(req: Request) {
             event.type === "response.completed" ||
             event.type === "response.output_text.done"
           ) {
-            console.log(`primary time ${Date.now() - primaryStart}ms`);
-            const nextRemaining =
-              entitlements.remainingReplies === null
-                ? null
-                : Math.max(entitlements.remainingReplies - 1, 0);
-            if (nextRemaining !== null) {
-              setRemainingForKey(entitlements.remainingKey, nextRemaining);
-              console.log(`decrement remaining to ${nextRemaining}`);
-              clientEntitlements.remainingReplies = nextRemaining;
-              clientEntitlements.remainingSource = "memory";
-              applyGatingIfNeeded(clientEntitlements);
-              sendEvent("meta", { entitlements: clientEntitlements });
-            }
+            logEvent("[ai] primary end", { ms: Date.now() - primaryStart });
+            logEvent("[ai] response stream");
             sendEvent("done", {});
             controller.close();
             return;
           }
         }
 
+        logEvent("[ai] primary end", { ms: Date.now() - primaryStart });
+        logEvent("[ai] response stream");
         sendEvent("done", {});
         controller.close();
       } catch (error) {

@@ -33,6 +33,16 @@ body {
   font-family: var(--font-body), system-ui, sans-serif;
 }
 
+html.chat-page,
+body.chat-page {
+  height: 100%;
+  overflow: hidden;
+}
+
+body.chat-page footer {
+  display: none;
+}
+
 .font-display {
   font-family: var(--font-head), system-ui, sans-serif;
 }

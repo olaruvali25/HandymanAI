@@ -1,16 +1,21 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import {
   createContext,
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
   type ChangeEvent,
 } from "react";
+import { useConvexAuth, useMutation, useQuery } from "convex/react";
+import type { Id } from "@convex/_generated/dataModel";
+import { api } from "@convex/_generated/api";
 import {
   AssistantRuntimeProvider,
   ComposerPrimitive,
@@ -20,6 +25,8 @@ import {
   useAssistantState,
   useLocalRuntime,
   type ChatModelAdapter,
+  type TextMessagePart,
+  type ThreadUserMessagePart,
   type ThreadMessage,
 } from "@assistant-ui/react";
 
@@ -66,6 +73,20 @@ type Entitlements = {
   };
 };
 
+type HistoryThread = {
+  id: Id<"chatThreads">;
+  title: string;
+  updatedAt: number;
+  lastPreview: string;
+};
+
+type HistoryMessage = {
+  role: "user" | "assistant" | "system";
+  contentText: string;
+  createdAt: number;
+  attachments?: unknown[];
+};
+
 const defaultEntitlements: Entitlements = {
   userHasAccount: false,
   userPlan: "none",
@@ -92,6 +113,15 @@ type MessageActions = {
   };
 };
 
+type UiAttachment = {
+  id: string;
+  kind: "image" | "file";
+  name: string;
+  mime: string;
+  size: number;
+  previewUrl?: string;
+};
+
 const EntitlementsContext = createContext<{
   entitlements: Entitlements;
   entitlementsSource: "init" | "api";
@@ -102,8 +132,8 @@ const EntitlementsContext = createContext<{
   entitlements: defaultEntitlements,
   entitlementsSource: "init",
   messageActions: null,
-  setEntitlements: () => {},
-  setMessageActions: () => {},
+  setEntitlements: () => { },
+  setMessageActions: () => { },
 });
 
 const useEntitlements = () => useContext(EntitlementsContext);
@@ -154,6 +184,23 @@ const createChatAdapter = (options?: {
           userCountry,
           userLanguage: locale,
           threadContext: "web-chat",
+          attachments:
+            messages[messages.length - 1]?.role === "user"
+              ? (messages[messages.length - 1]?.content as any[])
+                ?.filter((part) => part.type === "image")
+                ?.map((part) => {
+                  const dataUrl = part.image as string;
+                  const mimeType = dataUrl.startsWith("data:")
+                    ? dataUrl.slice(5, dataUrl.indexOf(";"))
+                    : "image/png";
+                  return {
+                    dataUrl,
+                    type: mimeType,
+                    name: part.filename ?? "image.png",
+                    size: 0,
+                  };
+                })
+              : undefined,
         }),
         signal: abortSignal,
       });
@@ -431,11 +478,56 @@ function AttachmentIcon() {
   );
 }
 
+const formatFileSize = (size?: number) => {
+  if (!size || !Number.isFinite(size)) return "";
+  if (size >= 1024 * 1024) return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+  if (size >= 1024) return `${Math.round(size / 1024)} KB`;
+  return `${size} B`;
+};
+
+const getUiAttachments = (
+  content: ThreadMessage["content"],
+): UiAttachment[] => {
+  if (!Array.isArray(content)) return [];
+  return content
+    .map((part, index) => {
+      if (part.type === "image" && "image" in part) {
+        return {
+          id: `image-${index}`,
+          kind: "image",
+          name:
+            (part as { filename?: string }).filename ?? "Image",
+          mime: "image",
+          size: 0,
+          previewUrl: (part as { image: string }).image,
+        };
+      }
+      if (part.type === "file") {
+        const file = part as {
+          filename?: string;
+          mimeType?: string;
+        };
+        return {
+          id: `file-${index}`,
+          kind: "file",
+          name: file.filename ?? "Attachment",
+          mime: file.mimeType ?? "",
+          size: 0,
+        };
+      }
+      return null;
+    })
+    .filter((item): item is UiAttachment => item !== null);
+};
+
 const ChatMessage = () => {
   const { messageActions } = useEntitlements();
   const role = useAssistantState((state) => state.message.role);
   const isUser = role === "user";
   const status = useAssistantState((state) => state.message.status);
+  const messageContent = useAssistantState(
+    (state) => state.message.content as ThreadMessage["content"],
+  );
   const isError =
     role === "assistant" &&
     status?.type === "incomplete" &&
@@ -450,6 +542,17 @@ const ChatMessage = () => {
     return lastAssistant === state.message;
   });
 
+  const attachments = getUiAttachments(messageContent);
+  const imageAttachments = attachments.filter((item) => item.kind === "image");
+  const fileAttachments = attachments.filter((item) => item.kind === "file");
+  const textContent = Array.isArray(messageContent)
+    ? messageContent
+      .filter((part) => part.type === "text" && "text" in part)
+      .map((part) => (part as { text: string }).text)
+      .filter(Boolean)
+      .join("\n")
+    : "";
+
   return (
     <MessagePrimitive.Root className="px-4 py-2">
       <div
@@ -463,8 +566,54 @@ const ChatMessage = () => {
               : "border border-[var(--border)] bg-[var(--bg-elev)] text-[var(--text)] text-base"
             }`}
         >
-          <div className="text-left whitespace-pre-wrap">
-            <MessagePrimitive.Content />
+          <div className="flex flex-col gap-3">
+            {imageAttachments.length > 0 && (
+              <div className="grid grid-cols-3 gap-2">
+                {imageAttachments.map((image) => (
+                  <a
+                    key={image.id}
+                    href={image.previewUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="block"
+                  >
+                    <Image
+                      src={image.previewUrl ?? ""}
+                      alt={image.name}
+                      width={220}
+                      height={220}
+                      className="h-24 w-full rounded-lg object-cover"
+                      unoptimized
+                    />
+                  </a>
+                ))}
+              </div>
+            )}
+            {fileAttachments.length > 0 && (
+              <div className="flex flex-col gap-2">
+                {fileAttachments.map((file) => (
+                  <div
+                    key={file.id}
+                    className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface)]/70 px-3 py-2 text-xs text-[var(--text)]"
+                  >
+                    <AttachmentIcon />
+                    <div className="min-w-0">
+                      <div className="truncate font-medium">{file.name}</div>
+                      {file.size ? (
+                        <div className="text-[10px] text-[var(--muted)]">
+                          {formatFileSize(file.size)}
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            {textContent ? (
+              <div className="whitespace-pre-wrap">{textContent}</div>
+            ) : !Array.isArray(messageContent) ? (
+              <MessagePrimitive.Content />
+            ) : null}
           </div>
         </div>
       </div>
@@ -533,6 +682,7 @@ type ComposerProps = {
   setVoiceGender: (value: "female" | "male") => void;
   canVoice: boolean;
   canPhotos: boolean;
+  inlineThread?: boolean;
 };
 
 const Composer = ({
@@ -547,6 +697,7 @@ const Composer = ({
   setVoiceGender,
   canVoice,
   canPhotos,
+  inlineThread = false,
 }: ComposerProps) => {
   const api = useAssistantApi();
   const isEmpty = useAssistantState((state) => state.composer.isEmpty);
@@ -686,9 +837,49 @@ const Composer = ({
     }
   };
 
+  const buildUserContent = async (
+    text: string,
+    file: File | null,
+  ): Promise<ThreadUserMessagePart[]> => {
+    const content: ThreadUserMessagePart[] = [];
+
+    if (file) {
+      if (file.type.startsWith("image/")) {
+        const base64 = await new Promise<string>((resolve) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.readAsDataURL(file);
+        });
+        content.push({
+          type: "image",
+          image: base64,
+          filename: file.name,
+        });
+      } else {
+        const data = await new Promise<string>((resolve) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.readAsDataURL(file);
+        });
+        content.push({
+          type: "file",
+          filename: file.name,
+          data,
+          mimeType: file.type,
+        });
+      }
+    }
+
+    if (text) {
+      content.push({ type: "text", text });
+    }
+
+    return content;
+  };
+
   return (
     <ComposerPrimitive.Root
-      className="group/composer mx-auto w-full max-w-2xl"
+      className="group/composer mx-auto w-full max-w-3xl px-4"
       data-empty={isEmpty}
       data-running={isRunning}
     >
@@ -741,6 +932,21 @@ const Composer = ({
         <ComposerPrimitive.Input
           placeholder="Describe the problem..."
           className="min-h-[44px] w-full bg-transparent py-2.5 text-base text-[var(--text)] outline-none placeholder:text-[var(--muted)]"
+          onKeyDown={async (e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              const text = api.composer().getState().text.trim();
+              if (!text && !selectedFile) return;
+
+              const content = await buildUserContent(text, selectedFile);
+
+              if (content.length > 0) {
+                api.thread().append({ role: "user", content });
+                api.composer().setText("");
+                handleRemoveFile();
+              }
+            }
+          }}
         />
 
         <select
@@ -850,12 +1056,25 @@ const Composer = ({
           >
             {isListening ? <SquareIcon /> : <MicIcon />}
           </button>
-          <ComposerPrimitive.Send
+          <button
+            type="button"
+            onClick={async () => {
+              const text = api.composer().getState().text.trim();
+              if (!text && !selectedFile) return;
+
+              const content = await buildUserContent(text, selectedFile);
+
+              if (content.length > 0) {
+                api.thread().append({ role: "user", content });
+                api.composer().setText("");
+                handleRemoveFile();
+              }
+            }}
             className={`absolute inset-0 flex items-center justify-center transition group-data-[empty=true]/composer:scale-0 group-data-[empty=true]/composer:opacity-0 ${isListening ? "pointer-events-none scale-0 opacity-0" : ""
               }`}
           >
             <ArrowUpIcon />
-          </ComposerPrimitive.Send>
+          </button>
           <ComposerPrimitive.Cancel className="absolute inset-0 flex items-center justify-center transition group-data-[running=false]/composer:scale-0 group-data-[running=false]/composer:opacity-0">
             <SquareIcon />
           </ComposerPrimitive.Cancel>
@@ -895,7 +1114,7 @@ const ComposerContainer = ({
   if (isThreadEmpty) return null;
 
   return (
-    <div className="sticky bottom-0 bg-gradient-to-t from-[var(--bg)] to-transparent pb-4 pt-2">
+    <div className="sticky bottom-0 mt-auto bg-gradient-to-t from-[var(--bg)] to-transparent pb-4 pt-2">
       {children}
     </div>
   );
@@ -903,9 +1122,19 @@ const ComposerContainer = ({
 
 export default function GrokThread({
   onChatStart,
+  showHistorySidebar = false,
+  inlineThread = false,
+  header,
+  initialThreadId = null,
 }: {
   onChatStart?: () => void;
+  showHistorySidebar?: boolean;
+  inlineThread?: boolean;
+  header?: React.ReactNode;
+  initialThreadId?: string | null;
 }) {
+  const { isAuthenticated } = useConvexAuth();
+  const [guestChatId, setGuestChatId] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [selectedLanguage, setSelectedLanguage] = useState("auto");
   const [speechEnabled, setSpeechEnabled] = useState(true);
@@ -918,6 +1147,28 @@ export default function GrokThread({
   const [messageActions, setMessageActions] =
     useState<MessageActions | null>(null);
   const prevRemainingRef = useRef<number | null>(null);
+  const [activeThreadId, setActiveThreadId] = useState<string | null>(
+    initialThreadId,
+  );
+  const [isHistoryCollapsed, setIsHistoryCollapsed] = useState(false);
+  const [isHistoryDrawerOpen, setIsHistoryDrawerOpen] = useState(false);
+  const canUseChatHistory = isAuthenticated;
+  const shouldPersistHistory = isAuthenticated || Boolean(guestChatId);
+  const threads = useQuery(
+    api.chatHistory.listThreadsForUser,
+    isAuthenticated && canUseChatHistory && showHistorySidebar ? {} : "skip",
+  ) as HistoryThread[] | undefined;
+  const threadMessages = useQuery(
+    api.chatHistory.getThreadMessages,
+    isAuthenticated && canUseChatHistory && activeThreadId
+      ? { threadId: activeThreadId as Id<"chatThreads"> }
+      : "skip",
+  ) as HistoryMessage[] | undefined;
+  const createThread = useMutation(api.chatHistory.createThread);
+  const appendMessages = useMutation(api.chatHistory.appendMessages);
+  const mergeGuestThreads = useMutation(api.chatHistory.mergeGuestThreads);
+  const renameThread = useMutation(api.chatHistory.renameThread);
+  const deleteThread = useMutation(api.chatHistory.deleteThread);
   const setEntitlementsWithSource = useCallback(
     (value: Entitlements, source: "init" | "api" = "api") => {
       setEntitlements(value);
@@ -934,6 +1185,12 @@ export default function GrokThread({
     [setEntitlementsWithSource],
   );
   const runtime = useLocalRuntime(chatAdapter);
+  const createGuestChatId = useCallback(() => {
+    if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+      return crypto.randomUUID();
+    }
+    return `guest-${Date.now()}`;
+  }, []);
 
   useEffect(() => {
     let isMounted = true;
@@ -969,13 +1226,48 @@ export default function GrokThread({
   }, [entitlements.capabilities.photos, selectedFile]);
 
   useEffect(() => {
+    if (initialThreadId) {
+      setActiveThreadId(initialThreadId);
+    }
+  }, [initialThreadId]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (isAuthenticated) {
+      const existing = localStorage.getItem("fixly_guest_chat_id");
+      setGuestChatId(existing);
+      return;
+    }
+    const existing = localStorage.getItem("fixly_guest_chat_id");
+    if (existing) {
+      setGuestChatId(existing);
+      return;
+    }
+    const created = createGuestChatId();
+    localStorage.setItem("fixly_guest_chat_id", created);
+    setGuestChatId(created);
+  }, [createGuestChatId, isAuthenticated]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    if (!guestChatId) return;
+    if (typeof window === "undefined") return;
+    mergeGuestThreads({ guestChatId })
+      .then(() => {
+        localStorage.removeItem("fixly_guest_chat_id");
+        setGuestChatId(null);
+      })
+      .catch(() => { });
+  }, [guestChatId, isAuthenticated, mergeGuestThreads]);
+
+  useEffect(() => {
     if (process.env.NODE_ENV !== "development") return;
     const sourceLabel = entitlementsSource === "api" ? "server response" : "init";
-      const remainingSource = entitlements.remainingSource ?? "unknown";
-      console.debug(
-        "[entitlements]",
-        `remaining=${String(entitlements.remainingReplies)} from ${sourceLabel}/${remainingSource}`,
-      );
+    const remainingSource = entitlements.remainingSource ?? "unknown";
+    console.debug(
+      "[entitlements]",
+      `remaining=${String(entitlements.remainingReplies)} from ${sourceLabel}/${remainingSource}`,
+    );
     if (
       entitlementsSource === "api" &&
       typeof entitlements.remainingReplies === "number" &&
@@ -1003,25 +1295,67 @@ export default function GrokThread({
       }}
     >
       <AssistantRuntimeProvider runtime={runtime}>
-      <ChatThreadContent
-        onChatStart={onChatStart}
+        <ChatThreadContent
+          onChatStart={onChatStart}
+          isAuthenticated={isAuthenticated}
+          canUseChatHistory={canUseChatHistory}
+          guestChatId={guestChatId}
+          setGuestChatId={setGuestChatId}
+          shouldPersistHistory={shouldPersistHistory}
+        createGuestChatId={createGuestChatId}
+        showHistorySidebar={showHistorySidebar}
+        inlineThread={inlineThread}
+        header={header}
+        threads={threads}
+        threadMessages={threadMessages}
+        activeThreadId={activeThreadId}
+        setActiveThreadId={setActiveThreadId}
+        isHistoryCollapsed={isHistoryCollapsed}
+        setIsHistoryCollapsed={setIsHistoryCollapsed}
+        isHistoryDrawerOpen={isHistoryDrawerOpen}
+        setIsHistoryDrawerOpen={setIsHistoryDrawerOpen}
+        createThread={createThread}
+        appendMessages={appendMessages}
+        renameThread={renameThread}
+        deleteThread={deleteThread}
         selectedFile={selectedFile}
         setSelectedFile={setSelectedFile}
         selectedLanguage={selectedLanguage}
-        setSelectedLanguage={setSelectedLanguage}
-        speechEnabled={speechEnabled}
-        setSpeechEnabled={setSpeechEnabled}
-        voiceGender={voiceGender}
-        setVoiceGender={setVoiceGender}
-      />
-      {process.env.NODE_ENV === "development" && <EntitlementsDebug />}
-    </AssistantRuntimeProvider>
+          setSelectedLanguage={setSelectedLanguage}
+          speechEnabled={speechEnabled}
+          setSpeechEnabled={setSpeechEnabled}
+          voiceGender={voiceGender}
+          setVoiceGender={setVoiceGender}
+        />
+        {process.env.NODE_ENV === "development" && <EntitlementsDebug />}
+      </AssistantRuntimeProvider>
     </EntitlementsContext.Provider>
   );
 }
 
 const ChatThreadContent = ({
   onChatStart,
+  isAuthenticated,
+  canUseChatHistory,
+  guestChatId,
+  setGuestChatId,
+  shouldPersistHistory,
+  createGuestChatId,
+  showHistorySidebar,
+  inlineThread,
+  header,
+  threads,
+  threadMessages,
+  activeThreadId,
+  setActiveThreadId,
+  isHistoryCollapsed,
+  setIsHistoryCollapsed,
+  isHistoryDrawerOpen,
+  setIsHistoryDrawerOpen,
+  createThread,
+  appendMessages,
+  renameThread,
+  deleteThread,
   selectedFile,
   setSelectedFile,
   selectedLanguage,
@@ -1032,6 +1366,39 @@ const ChatThreadContent = ({
   setVoiceGender,
 }: {
   onChatStart?: () => void;
+  isAuthenticated: boolean;
+  canUseChatHistory: boolean;
+  guestChatId: string | null;
+  setGuestChatId: (value: string | null) => void;
+  shouldPersistHistory: boolean;
+  createGuestChatId: () => string;
+  showHistorySidebar: boolean;
+  inlineThread: boolean;
+  header?: React.ReactNode;
+  threads?: HistoryThread[];
+  threadMessages?: HistoryMessage[];
+  activeThreadId: string | null;
+  setActiveThreadId: (value: string | null) => void;
+  isHistoryCollapsed: boolean;
+  setIsHistoryCollapsed: (value: boolean) => void;
+  isHistoryDrawerOpen: boolean;
+  setIsHistoryDrawerOpen: (value: boolean) => void;
+  createThread: (args: {
+    title?: string;
+    guestChatId?: string;
+  }) => Promise<Id<"chatThreads">>;
+  appendMessages: (args: {
+    threadId: Id<"chatThreads">;
+    guestChatId?: string;
+    messages: Array<{
+      role: "user" | "assistant" | "system";
+      contentText: string;
+      createdAt?: number;
+      attachments?: unknown[];
+    }>;
+  }) => Promise<null>;
+  renameThread: (args: { threadId: Id<"chatThreads">; title: string }) => Promise<null>;
+  deleteThread: (args: { threadId: Id<"chatThreads"> }) => Promise<null>;
   selectedFile: File | null;
   setSelectedFile: (file: File | null) => void;
   selectedLanguage: string;
@@ -1042,6 +1409,11 @@ const ChatThreadContent = ({
   setVoiceGender: (value: "female" | "male") => void;
 }) => {
   const { entitlements } = useEntitlements();
+  const api = useAssistantApi();
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const bottomRef = useRef<HTMLDivElement | null>(null);
+  const isAtBottomRef = useRef(true);
+  const scrollRafRef = useRef<number | null>(null);
   const lastUserText = useAssistantState((state) => {
     const messages = state.thread.messages;
     for (let i = messages.length - 1; i >= 0; i -= 1) {
@@ -1075,6 +1447,41 @@ const ChatThreadContent = ({
     const last = messages[messages.length - 1];
     return last?.role ?? null;
   });
+  const threadMessagesState = useAssistantState((state) => state.thread.messages);
+
+  const updateIsAtBottom = useCallback(() => {
+    const element = scrollRef.current;
+    if (!element) return;
+    const distance =
+      element.scrollHeight - (element.scrollTop + element.clientHeight);
+    isAtBottomRef.current = distance < 120;
+  }, []);
+
+  const scrollToBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
+    const element = scrollRef.current;
+    if (!element) return;
+    element.scrollTo({ top: element.scrollHeight, behavior });
+    bottomRef.current?.scrollIntoView({ block: "end", behavior });
+  }, []);
+
+  useEffect(() => {
+    updateIsAtBottom();
+  }, [updateIsAtBottom, threadMessagesState.length]);
+
+  useLayoutEffect(() => {
+    if (!inlineThread) return;
+    if (!isAtBottomRef.current) return;
+    if (scrollRafRef.current !== null) {
+      cancelAnimationFrame(scrollRafRef.current);
+    }
+    scrollRafRef.current = requestAnimationFrame(() => {
+      scrollToBottom("smooth");
+    });
+  }, [inlineThread, lastAssistantText, threadMessagesState.length, scrollToBottom]);
+
+  useEffect(() => {
+    activeThreadIdRef.current = activeThreadId;
+  }, [activeThreadId]);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const ttsAbortControllersRef = useRef<AbortController[]>([]);
   const ttsPendingAudioRef = useRef<Map<number, HTMLAudioElement>>(new Map());
@@ -1084,6 +1491,10 @@ const ChatThreadContent = ({
   const ttsSequenceRef = useRef(0);
   const ttsNextPlayRef = useRef(0);
   const lastAssistantLengthRef = useRef(0);
+  const loadedThreadRef = useRef<string | null>(null);
+  const lastPersistedCountRef = useRef(0);
+  const isPersistingRef = useRef(false);
+  const activeThreadIdRef = useRef<string | null>(activeThreadId);
 
   const clearTts = () => {
     ttsAbortControllersRef.current.forEach((controller) => controller.abort());
@@ -1149,6 +1560,35 @@ const ChatThreadContent = ({
         // Ignore TTS failures to avoid blocking chat.
       });
   }, [playNextAudio, voiceGender]);
+
+  useEffect(() => {
+    if (!canUseChatHistory || !activeThreadId || !threadMessages) return;
+    if (loadedThreadRef.current === activeThreadId) return;
+    const initialMessages = threadMessages.map((message) => ({
+      role: message.role,
+      content: [
+        {
+          type: "text",
+          text: message.contentText,
+        } as TextMessagePart,
+      ],
+    }));
+    api.thread().reset(initialMessages);
+    loadedThreadRef.current = activeThreadId;
+    lastPersistedCountRef.current = initialMessages.length;
+  }, [
+    api,
+    activeThreadId,
+    canUseChatHistory,
+    threadMessages,
+  ]);
+
+  useEffect(() => {
+    if (!activeThreadId) {
+      loadedThreadRef.current = null;
+      lastPersistedCountRef.current = threadMessagesState.length;
+    }
+  }, [activeThreadId, threadMessagesState.length]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -1218,61 +1658,468 @@ const ChatThreadContent = ({
     enqueueTts,
   ]);
 
+  useEffect(() => {
+    if (!shouldPersistHistory) return;
+    if (isRunning) return;
+    if (lastMessageRole !== "assistant") return;
+    if (
+      lastAssistantStatus?.type === "incomplete" &&
+      lastAssistantStatus.reason === "error"
+    ) {
+      return;
+    }
+    if (threadMessagesState.length <= lastPersistedCountRef.current) return;
+    if (isPersistingRef.current) return;
+    if (!isAuthenticated && !guestChatId && typeof window !== "undefined") {
+      const created = createGuestChatId();
+      localStorage.setItem("fixly_guest_chat_id", created);
+      setGuestChatId(created);
+      return;
+    }
+
+    const newMessages = threadMessagesState
+      .slice(lastPersistedCountRef.current)
+      .map((message) => ({
+        role: message.role,
+        contentText: extractText(message).trim(),
+      }))
+      .filter((message) => message.contentText.length > 0);
+
+    if (newMessages.length === 0) {
+      lastPersistedCountRef.current = threadMessagesState.length;
+      return;
+    }
+
+    isPersistingRef.current = true;
+    const persist = async () => {
+      let threadId = activeThreadIdRef.current;
+      if (!threadId) {
+        const firstUser = threadMessagesState.find(
+          (message) => message.role === "user",
+        );
+        const titleSource = firstUser ? extractText(firstUser).trim() : "Chat";
+        const title =
+          titleSource.split("\n")[0].slice(0, 48) || "New repair chat";
+        threadId = await createThread({
+          title,
+          guestChatId: isAuthenticated ? undefined : guestChatId ?? undefined,
+        });
+        setActiveThreadId(threadId);
+        loadedThreadRef.current = threadId;
+      }
+
+      await appendMessages({
+        threadId: threadId as Id<"chatThreads">,
+        guestChatId: guestChatId ?? undefined,
+        messages: newMessages,
+      });
+      lastPersistedCountRef.current = threadMessagesState.length;
+    };
+
+    persist()
+      .catch(() => { })
+      .finally(() => {
+        isPersistingRef.current = false;
+      });
+  }, [
+    appendMessages,
+    guestChatId,
+    shouldPersistHistory,
+    createThread,
+    createGuestChatId,
+    isRunning,
+    lastAssistantStatus,
+    lastMessageRole,
+    setActiveThreadId,
+    threadMessagesState,
+  ]);
+
   return (
     <>
       <ChatLogic onChatStart={onChatStart} />
-      <ChatShell onClose={() => setSelectedFile(null)}>
-        <ThreadPrimitive.Root className="flex h-full w-full flex-col bg-transparent">
-          <ThreadPrimitive.Empty>
-            <div className="flex w-full flex-col items-center justify-center">
-              <Composer
-                selectedFile={selectedFile}
-                setSelectedFile={setSelectedFile}
-                selectedLanguage={selectedLanguage}
-                setSelectedLanguage={setSelectedLanguage}
-                lastUserText={lastUserText}
-                speechEnabled={speechEnabled}
-                setSpeechEnabled={setSpeechEnabled}
-                voiceGender={voiceGender}
-                setVoiceGender={setVoiceGender}
-                canVoice={entitlements.capabilities.voice}
-                canPhotos={entitlements.capabilities.photos}
-              />
-            </div>
-          </ThreadPrimitive.Empty>
-
-          <ThreadPrimitive.Viewport className="flex grow flex-col gap-4 overflow-y-auto pb-4 pt-4">
-            <ThreadPrimitive.Messages components={{ Message: ChatMessage }} />
-            <TypingIndicator />
-          </ThreadPrimitive.Viewport>
-
-          <ComposerContainer>
-            <Composer
-              selectedFile={selectedFile}
-              setSelectedFile={setSelectedFile}
-              selectedLanguage={selectedLanguage}
-              setSelectedLanguage={setSelectedLanguage}
-              lastUserText={lastUserText}
-              speechEnabled={speechEnabled}
-              setSpeechEnabled={setSpeechEnabled}
-              voiceGender={voiceGender}
-              setVoiceGender={setVoiceGender}
-              canVoice={entitlements.capabilities.voice}
-              canPhotos={entitlements.capabilities.photos}
+      <ChatShell
+        onClose={() => setSelectedFile(null)}
+        inlineThread={inlineThread}
+      >
+        <div
+          className={
+            showHistorySidebar
+              ? "flex h-full w-full items-stretch"
+              : "h-full w-full"
+          }
+        >
+          {showHistorySidebar ? (
+            <ChatHistorySidebar
+              canUseChatHistory={canUseChatHistory}
+              isAuthenticated={isAuthenticated}
+              threads={threads}
+              activeThreadId={activeThreadId}
+              onSelectThread={(threadId) => {
+                setActiveThreadId(threadId);
+                loadedThreadRef.current = null;
+                lastPersistedCountRef.current = 0;
+                api.thread().reset();
+                setIsHistoryDrawerOpen(false);
+              }}
+              onNewChat={async () => {
+                api.thread().reset();
+                if (canUseChatHistory && isAuthenticated) {
+                  try {
+                    const threadId = await createThread({
+                      title: "New repair chat",
+                    });
+                    setActiveThreadId(threadId);
+                    loadedThreadRef.current = threadId;
+                  } catch {
+                    setActiveThreadId(null);
+                  }
+                } else {
+                  setActiveThreadId(null);
+                }
+              }}
+              onRenameThread={(threadId, title) => renameThread({ threadId, title })}
+              onDeleteThread={(threadId) => {
+                deleteThread({ threadId });
+                if (activeThreadId === threadId) {
+                  setActiveThreadId(null);
+                  api.thread().reset();
+                }
+              }}
+              isCollapsed={isHistoryCollapsed}
+              onToggleCollapse={() => setIsHistoryCollapsed(!isHistoryCollapsed)}
+              isDrawerOpen={isHistoryDrawerOpen}
+              onToggleDrawer={() =>
+                setIsHistoryDrawerOpen(!isHistoryDrawerOpen)
+              }
             />
-          </ComposerContainer>
-        </ThreadPrimitive.Root>
+          ) : null}
+          <div className="flex min-w-0 flex-1 flex-col">
+            {header ? (
+              <div className="shrink-0 pb-8">{header}</div>
+            ) : null}
+            <ThreadPrimitive.Root className="flex h-full w-full min-h-0 flex-col bg-transparent">
+              <ThreadPrimitive.Empty>
+                <div className="flex w-full flex-col items-center justify-center">
+                  <Composer
+                    selectedFile={selectedFile}
+                    setSelectedFile={setSelectedFile}
+                    selectedLanguage={selectedLanguage}
+                    setSelectedLanguage={setSelectedLanguage}
+                    lastUserText={lastUserText}
+                    speechEnabled={speechEnabled}
+                    setSpeechEnabled={setSpeechEnabled}
+                    voiceGender={voiceGender}
+                    setVoiceGender={setVoiceGender}
+                    canVoice={entitlements.capabilities.voice}
+                    canPhotos={entitlements.capabilities.photos}
+                    inlineThread={inlineThread}
+                  />
+                </div>
+              </ThreadPrimitive.Empty>
+
+              <div
+                className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain scroll-smooth scroll-pb-28 pb-28 pt-4"
+                ref={scrollRef}
+                onScroll={updateIsAtBottom}
+              >
+                <ThreadPrimitive.Viewport className="mx-auto flex w-full max-w-3xl flex-col gap-4 px-4">
+                  <ThreadPrimitive.Messages components={{ Message: ChatMessage }} />
+                  <TypingIndicator />
+                  <div ref={bottomRef} />
+                </ThreadPrimitive.Viewport>
+              </div>
+
+              <ComposerContainer>
+                <Composer
+                  selectedFile={selectedFile}
+                  setSelectedFile={setSelectedFile}
+                  selectedLanguage={selectedLanguage}
+                  setSelectedLanguage={setSelectedLanguage}
+                  lastUserText={lastUserText}
+                  speechEnabled={speechEnabled}
+                  setSpeechEnabled={setSpeechEnabled}
+                  voiceGender={voiceGender}
+                  setVoiceGender={setVoiceGender}
+                  canVoice={entitlements.capabilities.voice}
+                  canPhotos={entitlements.capabilities.photos}
+                  inlineThread={inlineThread}
+                />
+              </ComposerContainer>
+            </ThreadPrimitive.Root>
+          </div>
+        </div>
       </ChatShell>
     </>
+  );
+};
+
+const ChatHistorySidebar = ({
+  canUseChatHistory,
+  isAuthenticated,
+  threads,
+  activeThreadId,
+  onSelectThread,
+  onNewChat,
+  onRenameThread,
+  onDeleteThread,
+  isCollapsed,
+  onToggleCollapse,
+  isDrawerOpen,
+  onToggleDrawer,
+}: {
+  canUseChatHistory: boolean;
+  isAuthenticated: boolean;
+  threads?: HistoryThread[];
+  activeThreadId: string | null;
+  onSelectThread: (threadId: string) => void;
+  onNewChat: () => void;
+  onRenameThread: (threadId: Id<"chatThreads">, title: string) => void;
+  onDeleteThread: (threadId: Id<"chatThreads">) => void;
+  isCollapsed: boolean;
+  onToggleCollapse: () => void;
+  isDrawerOpen: boolean;
+  onToggleDrawer: () => void;
+}) => {
+  const [searchQuery, setSearchQuery] = useState("");
+  const [editingThreadId, setEditingThreadId] = useState<string | null>(null);
+  const [editTitle, setEditTitle] = useState("");
+
+  const filteredThreads = useMemo(() => {
+    if (!threads) return [];
+    if (!searchQuery) return threads;
+    return threads.filter((thread) =>
+      thread.title.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+  }, [threads, searchQuery]);
+
+  const handleStartEdit = (thread: HistoryThread) => {
+    setEditingThreadId(thread.id);
+    setEditTitle(thread.title);
+  };
+
+  const handleSaveEdit = () => {
+    if (editingThreadId && editTitle.trim()) {
+      onRenameThread(editingThreadId as Id<"chatThreads">, editTitle.trim());
+    }
+    setEditingThreadId(null);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      handleSaveEdit();
+    } else if (e.key === "Escape") {
+      setEditingThreadId(null);
+    }
+  };
+
+  const content = () => {
+    if (!isAuthenticated || !canUseChatHistory) {
+      return (
+        <div className="mt-4 rounded-xl border border-white/10 bg-white/5 px-4 py-4 text-xs text-[var(--muted)]">
+          Chat history is available on Medium, Big, and Pro plans.
+          <Link
+            href={isAuthenticated ? "/pricing" : "/login"}
+            className="mt-3 inline-flex w-full items-center justify-center rounded-full bg-[var(--accent)] px-3 py-2 text-xs font-semibold text-black transition hover:bg-[var(--accent-soft)]"
+          >
+            {isAuthenticated ? "Get a Fix" : "Log in"}
+          </Link>
+        </div>
+      );
+    }
+
+    return (
+      <>
+        <div className="mb-4 flex flex-col gap-2">
+          <button
+            type="button"
+            onClick={onNewChat}
+            className="flex w-full items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-white transition hover:border-white/30"
+          >
+            <PlusIcon />
+            <span>New chat</span>
+          </button>
+          {!isCollapsed && (
+            <div className="relative">
+              <input
+                type="text"
+                placeholder="Search chats..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full rounded-lg border border-white/10 bg-transparent px-3 py-1.5 text-xs text-white placeholder:text-[var(--muted)] focus:border-[var(--accent)] focus:outline-none"
+              />
+            </div>
+          )}
+        </div>
+
+        <div className="flex flex-col gap-1 overflow-y-auto">
+          {filteredThreads.length > 0 ? (
+            filteredThreads.map((thread) => (
+              <div
+                key={thread.id}
+                className={`group relative flex items-center rounded-lg px-3 py-2 transition ${activeThreadId === thread.id
+                  ? "bg-[var(--accent)]/10 text-white"
+                  : "text-[var(--muted)] hover:bg-white/5 hover:text-white"
+                  }`}
+              >
+                {editingThreadId === thread.id ? (
+                  <input
+                    type="text"
+                    value={editTitle}
+                    onChange={(e) => setEditTitle(e.target.value)}
+                    onBlur={handleSaveEdit}
+                    onKeyDown={handleKeyDown}
+                    autoFocus
+                    className="w-full bg-transparent text-xs font-semibold text-white outline-none"
+                  />
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => onSelectThread(thread.id)}
+                    className="flex min-w-0 flex-1 flex-col text-left"
+                  >
+                    <div className="truncate text-xs font-semibold">
+                      {thread.title}
+                    </div>
+                    <div className="truncate text-[10px] opacity-70">
+                      {thread.lastPreview}
+                    </div>
+                  </button>
+                )}
+
+                {!isCollapsed && editingThreadId !== thread.id && (
+                  <div className="absolute right-2 flex items-center gap-1 opacity-0 transition group-hover:opacity-100">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleStartEdit(thread);
+                      }}
+                      className="rounded p-1 hover:bg-white/10 hover:text-white"
+                      title="Rename"
+                    >
+                      <svg
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        className="h-3 w-3"
+                      >
+                        <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" />
+                      </svg>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (confirm("Delete this chat?")) {
+                          onDeleteThread(thread.id);
+                        }
+                      }}
+                      className="rounded p-1 hover:bg-red-500/20 hover:text-red-400"
+                      title="Delete"
+                    >
+                      <svg
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        className="h-3 w-3"
+                      >
+                        <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                      </svg>
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))
+          ) : (
+            <div className="px-3 py-2 text-xs text-[var(--muted)]">
+              {searchQuery ? "No matching chats." : "No chats yet."}
+            </div>
+          )}
+        </div>
+      </>
+    );
+  };
+
+  return (
+    <div className="relative h-full">
+      <button
+        type="button"
+        onClick={onToggleDrawer}
+        className="mb-3 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-2 text-xs text-white transition hover:border-white/30 lg:hidden"
+      >
+        History
+      </button>
+
+      <aside
+        className={`hidden h-full flex-col self-stretch border-r border-white/10 bg-[var(--bg-elev)]/60 p-3 lg:flex ${isCollapsed ? "w-14" : "w-64"
+          }`}
+      >
+        <div className="mb-4 flex items-center justify-between">
+          <span
+            className={`text-xs font-semibold text-white ${isCollapsed ? "hidden" : "block"
+              }`}
+          >
+            History
+          </span>
+          <button
+            type="button"
+            onClick={onToggleCollapse}
+            className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-white/10 bg-white/5 text-[var(--muted)] transition hover:text-white"
+            aria-label="Collapse history"
+          >
+            {isCollapsed ? "›" : "‹"}
+          </button>
+        </div>
+        {!isCollapsed ? (
+          <div className="flex min-h-0 flex-1 flex-col">{content()}</div>
+        ) : (
+          <button
+            type="button"
+            onClick={onNewChat}
+            className="mx-auto flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-white/5 text-white hover:bg-white/10"
+            title="New chat"
+          >
+            <PlusIcon />
+          </button>
+        )}
+      </aside>
+
+      <div
+        className={`fixed inset-0 z-40 bg-black/40 backdrop-blur-sm transition lg:hidden ${isDrawerOpen ? "opacity-100" : "pointer-events-none opacity-0"
+          }`}
+        onClick={onToggleDrawer}
+      />
+      <aside
+        className={`fixed inset-y-0 left-0 z-50 w-64 transform border-r border-white/10 bg-[var(--bg)]/95 p-4 transition lg:hidden ${isDrawerOpen ? "translate-x-0" : "-translate-x-full"
+          }`}
+      >
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-semibold text-white">History</span>
+          <button
+            type="button"
+            onClick={onToggleDrawer}
+            className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-white/10 bg-white/5 text-[var(--muted)]"
+            aria-label="Close history"
+          >
+            ×
+          </button>
+        </div>
+        <div className="mt-4 flex min-h-0 flex-1 flex-col">{content()}</div>
+      </aside>
+    </div>
   );
 };
 
 const ChatShell = ({
   children,
   onClose,
+  inlineThread,
 }: {
   children: React.ReactNode;
   onClose: () => void;
+  inlineThread: boolean;
 }) => {
   const api = useAssistantApi();
   const hasMessages = useAssistantState(
@@ -1282,12 +2129,12 @@ const ChatShell = ({
   return (
     <div
       className={
-        hasMessages
+        hasMessages && !inlineThread
           ? "fixed inset-0 z-50 flex min-h-screen flex-col bg-[var(--bg)] px-6 py-6"
-          : "relative flex h-full w-full flex-col"
+          : "relative flex h-full min-h-0 w-full flex-col overflow-hidden"
       }
     >
-      {hasMessages && (
+      {hasMessages && !inlineThread && (
         <button
           type="button"
           onClick={() => {

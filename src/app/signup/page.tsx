@@ -15,7 +15,7 @@ import { Label } from "@/components/ui/label";
 export default function SignupPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { signIn } = useAuthActions();
+  const { signIn, signOut } = useAuthActions();
   const { isAuthenticated, isLoading } = useConvexAuth();
 
   const [name, setName] = useState("");
@@ -23,11 +23,72 @@ export default function SignupPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isOauthSubmitting, setIsOauthSubmitting] = useState<
+    "google" | "facebook" | null
+  >(null);
 
   const rawReturnTo = searchParams.get("returnTo");
-  const returnTo =
-    rawReturnTo && rawReturnTo.startsWith("/") ? rawReturnTo : "/tasks";
+  const returnTo = rawReturnTo && rawReturnTo.startsWith("/") ? rawReturnTo : "/";
   const hasConvexUrl = Boolean(process.env.NEXT_PUBLIC_CONVEX_URL);
+  const oauthProviders = {
+    google: {
+      label: "Google",
+      envHint: "GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET",
+    },
+    facebook: {
+      label: "Facebook",
+      envHint: "FACEBOOK_CLIENT_ID/FACEBOOK_CLIENT_SECRET",
+    },
+  } as const;
+
+  const formatAuthError = (
+    message: string,
+    provider?: keyof typeof oauthProviders,
+  ) => {
+    const lower = message.toLowerCase();
+    if (lower.includes("missing environment variable")) {
+      return `${message}\n\nConvex Auth env vars are missing in the Convex deployment.`;
+    }
+    if (
+      provider &&
+      (lower.includes("provider") && lower.includes("not found"))
+    ) {
+      const meta = oauthProviders[provider];
+      return `${meta.label} OAuth isn't configured yet. Set ${meta.envHint} in your Convex env and restart convex dev.`;
+    }
+    if (
+      provider &&
+      (lower.includes("client") && (lower.includes("id") || lower.includes("secret")))
+    ) {
+      const meta = oauthProviders[provider];
+      return `${meta.label} OAuth credentials are missing. Set ${meta.envHint} in your Convex env and restart convex dev.`;
+    }
+    return message;
+  };
+
+  const handleOAuthSignIn = async (provider: keyof typeof oauthProviders) => {
+    setError(null);
+    if (!hasConvexUrl) {
+      setError(
+        "Missing NEXT_PUBLIC_CONVEX_URL. Run `npm run dev:convex` and paste the URL into `.env.local`.",
+      );
+      return;
+    }
+    setIsOauthSubmitting(provider);
+    try {
+      await signOut();
+      const result = await signIn(provider, { redirectTo: returnTo });
+      if (!result.signingIn && !result.redirect) {
+        setError(`${oauthProviders[provider].label} sign-in failed.`);
+      }
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "OAuth sign-in failed.";
+      setError(formatAuthError(message, provider));
+    } finally {
+      setIsOauthSubmitting(null);
+    }
+  };
 
   useEffect(() => {
     if (!isLoading && isAuthenticated) {
@@ -57,24 +118,21 @@ export default function SignupPage() {
                   }
                   setIsSubmitting(true);
                   try {
-                    await signIn("password", {
+                    await signOut();
+                    const result = await signIn("password", {
                       flow: "signUp",
                       name,
                       email,
                       password,
                       redirectTo: returnTo,
                     });
-                    router.push(returnTo);
+                    if (!result.signingIn) {
+                      setError("Sign up failed. Please check your details.");
+                    }
                   } catch (err) {
                     const message =
                       err instanceof Error ? err.message : "Sign up failed.";
-                    setError(
-                      message.includes("Missing environment variable")
-                        ? `${message}\n\nConvex Auth needs ` +
-                            "`SITE_URL`, `CONVEX_SITE_URL`, `JWT_PRIVATE_KEY`, and `JWKS` " +
-                            "set in the Convex environment (not Next.js)."
-                        : message,
-                    );
+                    setError(formatAuthError(message));
                   } finally {
                     setIsSubmitting(false);
                   }
@@ -88,6 +146,37 @@ export default function SignupPage() {
                     in <span className="text-white">.env.local</span>.
                   </div>
                 ) : null}
+                <div className="space-y-3">
+                  <Button
+                    className="w-full border-white/20 text-white hover:bg-white/10"
+                    type="button"
+                    variant="outline"
+                    disabled={isSubmitting || isOauthSubmitting !== null}
+                    onClick={() => handleOAuthSignIn("google")}
+                  >
+                    {isOauthSubmitting === "google"
+                      ? "Connecting..."
+                      : "Continue with Google"}
+                  </Button>
+                  <Button
+                    className="w-full border-white/20 text-white hover:bg-white/10"
+                    type="button"
+                    variant="outline"
+                    disabled={isSubmitting || isOauthSubmitting !== null}
+                    onClick={() => handleOAuthSignIn("facebook")}
+                  >
+                    {isOauthSubmitting === "facebook"
+                      ? "Connecting..."
+                      : "Continue with Facebook"}
+                  </Button>
+                </div>
+
+                <div className="flex items-center gap-3 text-xs text-[var(--muted)]">
+                  <span className="h-px flex-1 bg-white/10" />
+                  <span>or continue with email</span>
+                  <span className="h-px flex-1 bg-white/10" />
+                </div>
+
                 <div>
                   <Label className="text-[var(--muted)]" htmlFor="name">
                     Full name

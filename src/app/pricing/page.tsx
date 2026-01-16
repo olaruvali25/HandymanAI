@@ -79,7 +79,7 @@ const comparisonRows = [
   },
   {
     label: "Chat history",
-    values: ["—", "—", "—", "Yes"],
+    values: ["—", "Yes", "Yes", "Yes"],
   },
   {
     label: "Favorites",

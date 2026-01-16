@@ -1,7 +1,10 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  env: {
+    FIXLY_DISABLE_TTS: process.env.FIXLY_DISABLE_TTS,
+    FIXLY_DISABLE_STREAMING: process.env.FIXLY_DISABLE_STREAMING,
+  },
 };
 
 export default nextConfig;

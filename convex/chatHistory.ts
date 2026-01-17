@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { getAuthUserId } from "@convex-dev/auth/server";
 
+import type { Id } from "./_generated/dataModel";
 import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 
 type ConvexCtx = QueryCtx | MutationCtx;
@@ -322,8 +323,8 @@ export const deleteThread = mutation({
 });
 
 const assertThreadAccess = async (
-  ctx: ConvexCtx,
-  threadId: string,
+  ctx: MutationCtx,
+  threadId: Id<"chatThreads">,
   anonymousId?: string,
 ) => {
   const userId = await getAuthUserId(ctx);

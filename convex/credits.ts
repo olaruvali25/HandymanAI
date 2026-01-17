@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { getAuthUserId } from "@convex-dev/auth/server";
 
+import type { Id } from "./_generated/dataModel";
 import { mutation, type MutationCtx } from "./_generated/server";
 import { planSchema, type Plan } from "./plans";
 
@@ -14,7 +15,7 @@ export const getMonthlyCreditsForPlan = (plan: Plan) => {
 const applyGrant = async (
   ctx: MutationCtx,
   args: {
-    userId: string;
+    userId: Id<"users">;
     type: "plan_monthly" | "plan_start" | "topup";
     provider?: string;
     eventId: string;

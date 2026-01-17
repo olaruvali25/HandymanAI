@@ -1,14 +1,13 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 
-import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
+import { mutation, query, type MutationCtx } from "./_generated/server";
 
 const DEFAULT_ANON_CREDITS = 9;
 const DEFAULT_USER_CREDITS = 15;
 
-type ConvexCtx = QueryCtx | MutationCtx;
-
-const ensureUserCredits = async (ctx: ConvexCtx, userId: string) => {
+const ensureUserCredits = async (ctx: MutationCtx, userId: Id<"users">) => {
   const user = await ctx.db.get(userId);
   if (!user) {
     throw new Error("User not found");
@@ -23,7 +22,7 @@ const ensureUserCredits = async (ctx: ConvexCtx, userId: string) => {
   return { doc: user, credits: DEFAULT_USER_CREDITS };
 };
 
-const ensureAnonymousUser = async (ctx: ConvexCtx, anonymousId: string) => {
+const ensureAnonymousUser = async (ctx: MutationCtx, anonymousId: string) => {
   const existing = await ctx.db
     .query("anonymousUsers")
     .withIndex("by_anonymousId", (q) => q.eq("anonymousId", anonymousId))
@@ -39,12 +38,15 @@ const ensureAnonymousUser = async (ctx: ConvexCtx, anonymousId: string) => {
     updatedAt: now,
   });
   const doc = await ctx.db.get(id);
+  if (!doc) {
+    throw new Error("Anonymous user not found");
+  }
   return { doc, credits: DEFAULT_ANON_CREDITS };
 };
 
 const findCharge = async (
-  ctx: ConvexCtx,
-  actor: { userId?: string; anonymousId?: string },
+  ctx: MutationCtx,
+  actor: { userId?: Id<"users">; anonymousId?: string },
   turnId: string,
   stage: "user" | "assistant",
 ) => {
@@ -75,13 +77,14 @@ export const getCreditsForActor = query({
       const user = await ctx.db.get(userId);
       return { credits: typeof user?.credits === "number" ? user.credits : 0 };
     }
-    if (!args.anonymousId) {
+    const anonymousId = args.anonymousId;
+    if (!anonymousId) {
       return { credits: 0 };
     }
     const anonymousUser = await ctx.db
       .query("anonymousUsers")
       .withIndex("by_anonymousId", (q) =>
-        q.eq("anonymousId", args.anonymousId),
+        q.eq("anonymousId", anonymousId),
       )
       .unique();
     return { credits: anonymousUser?.credits ?? 0 };

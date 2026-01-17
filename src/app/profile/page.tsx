@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import Link from "next/link";
 import { useConvexAuth } from "convex/react";
 import { useUser } from "@/lib/useUser";
+import { useEntitlementsQuery } from "@/lib/queries/entitlements";
 import Container from "@/components/Container";
 import { Button } from "@/components/ui/button";
 import {
@@ -13,11 +14,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-
-type Entitlements = {
-  userHasAccount: boolean;
-  credits?: number;
-};
 
 type Invoice = {
   id: string;
@@ -39,26 +35,7 @@ const formatDate = (value?: number) => {
 export default function ProfilePage() {
   const { isAuthenticated, isLoading } = useConvexAuth();
   const { user } = useUser();
-  const [entitlements, setEntitlements] = useState<Entitlements | null>(null);
-
-  useEffect(() => {
-    let isMounted = true;
-    fetch("/api/ai")
-      .then((res) => res.json())
-      .then((data) => {
-        if (!isMounted) return;
-        if (data?.entitlements) {
-          setEntitlements(data.entitlements as Entitlements);
-        }
-      })
-      .catch(() => {
-        if (!isMounted) return;
-        setEntitlements(null);
-      });
-    return () => {
-      isMounted = false;
-    };
-  }, []);
+  const { data: entitlements } = useEntitlementsQuery();
 
   const createdAt = useMemo(() => formatDate(user?._creationTime), [user]);
   const invoices: Invoice[] = [];
@@ -100,9 +77,7 @@ export default function ProfilePage() {
             <Card className="border-[var(--border)] bg-[var(--bg-elev)]/60">
               <CardHeader>
                 <CardTitle className="text-white">Account</CardTitle>
-                <CardDescription>
-                  Your basic account details.
-                </CardDescription>
+                <CardDescription>Your basic account details.</CardDescription>
               </CardHeader>
               <CardContent className="grid gap-3 text-sm text-white/80">
                 <div className="flex flex-wrap items-center justify-between gap-2">
@@ -148,9 +123,7 @@ export default function ProfilePage() {
             <Card className="border-[var(--border)] bg-[var(--bg-elev)]/60">
               <CardHeader>
                 <CardTitle className="text-white">Credits</CardTitle>
-                <CardDescription>
-                  Your current credit balance.
-                </CardDescription>
+                <CardDescription>Your current credit balance.</CardDescription>
               </CardHeader>
               <CardContent className="flex flex-wrap items-center justify-between gap-4">
                 <div>
@@ -169,9 +142,7 @@ export default function ProfilePage() {
 
             <Card className="border-[var(--border)] bg-[var(--bg-elev)]/60">
               <CardHeader>
-                <CardTitle className="text-white">
-                  Payment & invoices
-                </CardTitle>
+                <CardTitle className="text-white">Payment & invoices</CardTitle>
                 <CardDescription>
                   Billing history and payment settings.
                 </CardDescription>
@@ -214,9 +185,7 @@ export default function ProfilePage() {
             <Card className="border-[var(--border)] bg-[var(--bg-elev)]/60">
               <CardHeader>
                 <CardTitle className="text-white">Security</CardTitle>
-                <CardDescription>
-                  Update your sign-in details.
-                </CardDescription>
+                <CardDescription>Update your sign-in details.</CardDescription>
               </CardHeader>
               <CardContent className="flex flex-wrap items-center justify-between gap-4 text-sm text-white/80">
                 <div className="text-[var(--muted)]">

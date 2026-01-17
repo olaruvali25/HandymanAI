@@ -1,22 +1,19 @@
 import type { Metadata } from "next";
-import { IBM_Plex_Sans, Sora } from "next/font/google";
 import { ConvexAuthNextjsServerProvider } from "@convex-dev/auth/nextjs/server";
 import ConvexClientProvider from "@/components/convex-client-provider";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
+
+import "@fontsource/ibm-plex-sans/400.css";
+import "@fontsource/ibm-plex-sans/500.css";
+import "@fontsource/ibm-plex-sans/600.css";
+import "@fontsource/ibm-plex-sans/700.css";
+import "@fontsource/sora/400.css";
+import "@fontsource/sora/500.css";
+import "@fontsource/sora/600.css";
+import "@fontsource/sora/700.css";
+
 import "./globals.css";
-
-const plexSans = IBM_Plex_Sans({
-  variable: "--font-plex",
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-});
-
-const sora = Sora({
-  variable: "--font-sora",
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-});
 
 export const metadata: Metadata = {
   title: {
@@ -35,7 +32,7 @@ export default async function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body
-        className={`${plexSans.variable} ${sora.variable} min-h-screen bg-[var(--bg)] text-[var(--text)] antialiased`}
+        className="min-h-screen bg-[var(--bg)] text-[var(--text)] antialiased"
         suppressHydrationWarning
       >
         <ConvexAuthNextjsServerProvider storageNamespace="handymanai">

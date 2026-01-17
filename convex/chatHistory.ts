@@ -2,7 +2,16 @@ import { v } from "convex/values";
 import { getAuthUserId } from "@convex-dev/auth/server";
 
 import type { Id } from "./_generated/dataModel";
-import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
+import {
+  mutation,
+  query,
+  type MutationCtx,
+  type QueryCtx,
+} from "./_generated/server";
+import {
+  chatAttachmentValidator,
+  chatMessageRoleValidator,
+} from "./validators/chat";
 
 type ConvexCtx = QueryCtx | MutationCtx;
 
@@ -55,9 +64,7 @@ export const listThreadsForActor = query({
     }
     const threads = await ctx.db
       .query("chatThreads")
-      .withIndex("by_anonymousId", (q) =>
-        q.eq("anonymousId", args.anonymousId),
-      )
+      .withIndex("by_anonymousId", (q) => q.eq("anonymousId", args.anonymousId))
       .order("desc")
       .take(30);
     return threads.map((thread) => ({
@@ -79,9 +86,7 @@ export const getThreadMessages = query({
     }
     const messages = await ctx.db
       .query("chatMessages")
-      .withIndex("by_thread_createdAt", (q) =>
-        q.eq("threadId", args.threadId),
-      )
+      .withIndex("by_thread_createdAt", (q) => q.eq("threadId", args.threadId))
       .order("asc")
       .collect();
 
@@ -161,14 +166,10 @@ export const appendMessages = mutation({
     guestChatId: v.optional(v.string()),
     messages: v.array(
       v.object({
-        role: v.union(
-          v.literal("user"),
-          v.literal("assistant"),
-          v.literal("system"),
-        ),
+        role: chatMessageRoleValidator,
         contentText: v.string(),
         createdAt: v.optional(v.number()),
-        attachments: v.optional(v.array(v.any())),
+        attachments: v.optional(v.array(chatAttachmentValidator)),
       }),
     ),
   },
@@ -193,7 +194,7 @@ export const appendMessages = mutation({
       await ctx.db.insert("chatMessages", {
         threadId: args.threadId,
         userId: userId ?? undefined,
-        anonymousId: userId ? undefined : args.guestChatId ?? undefined,
+        anonymousId: userId ? undefined : (args.guestChatId ?? undefined),
         guestChatId: userId ? undefined : args.guestChatId,
         role: message.role,
         contentText: message.contentText,
@@ -218,9 +219,7 @@ export const mergeGuestThreads = mutation({
     const { userId } = await requireAuthenticatedUser(ctx);
     const threads = await ctx.db
       .query("chatThreads")
-      .withIndex("by_anonymousId", (q) =>
-        q.eq("anonymousId", args.guestChatId),
-      )
+      .withIndex("by_anonymousId", (q) => q.eq("anonymousId", args.guestChatId))
       .collect();
     if (threads.length === 0) {
       const legacyThreads = await ctx.db
@@ -262,9 +261,7 @@ export const mergeGuestThreads = mutation({
 
     const anonymousUser = await ctx.db
       .query("anonymousUsers")
-      .withIndex("by_anonymousId", (q) =>
-        q.eq("anonymousId", args.guestChatId),
-      )
+      .withIndex("by_anonymousId", (q) => q.eq("anonymousId", args.guestChatId))
       .unique();
     if (anonymousUser && !anonymousUser.mergedToUserId) {
       const user = await ctx.db.get(userId);
@@ -349,7 +346,7 @@ export const appendUserMessage = mutation({
     threadId: v.id("chatThreads"),
     anonymousId: v.optional(v.string()),
     contentText: v.string(),
-    attachments: v.optional(v.array(v.any())),
+    attachments: v.optional(v.array(chatAttachmentValidator)),
   },
   handler: async (ctx, args) => {
     const { userId, thread } = await assertThreadAccess(
@@ -380,7 +377,7 @@ export const appendAssistantMessage = mutation({
     threadId: v.id("chatThreads"),
     anonymousId: v.optional(v.string()),
     contentText: v.string(),
-    attachments: v.optional(v.array(v.any())),
+    attachments: v.optional(v.array(chatAttachmentValidator)),
   },
   handler: async (ctx, args) => {
     const { userId, thread } = await assertThreadAccess(

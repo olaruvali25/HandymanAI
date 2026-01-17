@@ -14,15 +14,15 @@ export default function HowItWorksPage() {
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-[rgba(255,122,26,0.15)] via-transparent to-transparent opacity-70" />
         <Container>
           <div className="relative z-10 text-center">
-            <div className="inline-flex items-center gap-2 rounded-full border border-[var(--accent)]/30 bg-[var(--accent)]/10 px-4 py-1.5 text-xs font-bold uppercase tracking-widest text-[var(--accent)] shadow-[0_0_15px_-5px_var(--accent)]">
+            <div className="inline-flex items-center gap-2 rounded-full border border-[var(--accent)]/30 bg-[var(--accent)]/10 px-4 py-1.5 text-xs font-bold tracking-widest text-[var(--accent)] uppercase shadow-[0_0_15px_-5px_var(--accent)]">
               Reliable Fix Guidance
             </div>
-            <h2 className="mt-8 font-display text-5xl font-bold tracking-tighter text-white sm:text-6xl lg:text-7xl">
+            <h2 className="font-display mt-8 text-5xl font-bold tracking-tighter text-white sm:text-6xl lg:text-7xl">
               Stop guessing. Fix it right the first time.
             </h2>
             <p className="mx-auto mt-8 max-w-2xl text-lg leading-relaxed text-[var(--muted)] sm:text-xl">
-              Fixly helps you diagnose the problem and deliver professional-grade
-              repair steps in minutes.
+              Fixly helps you diagnose the problem and deliver
+              professional-grade repair steps in minutes.
             </p>
             <div className="mt-10 flex justify-center gap-4">
               <Link className={primaryButton} href="/signup">
@@ -42,10 +42,10 @@ export default function HowItWorksPage() {
         <Container>
           <div className="mx-auto max-w-5xl">
             <div className="text-center">
-              <div className="text-xs font-bold uppercase tracking-widest text-[var(--accent)]">
+              <div className="text-xs font-bold tracking-widest text-[var(--accent)] uppercase">
                 How It Works
               </div>
-              <h2 className="mt-4 font-display text-3xl font-bold tracking-tight text-white sm:text-4xl">
+              <h2 className="font-display mt-4 text-3xl font-bold tracking-tight text-white sm:text-4xl">
                 Three steps from problem to solution.
               </h2>
             </div>
@@ -71,7 +71,7 @@ export default function HowItWorksPage() {
                   <div className="absolute -top-6 left-8 flex h-12 w-12 items-center justify-center rounded-full border border-[var(--accent)]/30 bg-[var(--bg)] text-lg font-bold text-[var(--accent)] shadow-[0_0_15px_-5px_var(--accent)]">
                     {index + 1}
                   </div>
-                  <h3 className="mt-4 font-display text-xl font-bold text-white group-hover:text-[var(--accent)] transition-colors">
+                  <h3 className="font-display mt-4 text-xl font-bold text-white transition-colors group-hover:text-[var(--accent)]">
                     {item.title}
                   </h3>
                   <p className="mt-4 text-base leading-relaxed text-[var(--muted)]">
@@ -90,15 +90,15 @@ export default function HowItWorksPage() {
         <Container>
           <div className="mx-auto max-w-5xl">
             <div className="text-center">
-              <div className="text-xs font-bold uppercase tracking-widest text-[var(--muted)]">
+              <div className="text-xs font-bold tracking-widest text-[var(--muted)] uppercase">
                 Why Fixly
               </div>
-              <h2 className="mt-4 font-display text-3xl font-bold tracking-tight text-white sm:text-4xl">
+              <h2 className="font-display mt-4 text-3xl font-bold tracking-tight text-white sm:text-4xl">
                 Save money, time, and frustration on every repair.
               </h2>
               <p className="mx-auto mt-6 max-w-2xl text-lg text-[var(--muted)]">
-                Get the confidence of a pro without the scheduling delays or high
-                service fees.
+                Get the confidence of a pro without the scheduling delays or
+                high service fees.
               </p>
             </div>
 
@@ -108,8 +108,8 @@ export default function HowItWorksPage() {
                   Typical handyman visit
                 </h3>
                 <p className="mt-4 text-base leading-relaxed text-[var(--muted)]">
-                  $120-$240 for a basic repair, plus scheduling delays and repeat
-                  visits.
+                  $120-$240 for a basic repair, plus scheduling delays and
+                  repeat visits.
                 </p>
               </div>
               <div className="rounded-3xl border border-[var(--accent)]/30 bg-[var(--accent)]/[0.03] p-8 shadow-2xl transition-all duration-300 hover:bg-[var(--accent)]/[0.05]">
@@ -141,10 +141,10 @@ export default function HowItWorksPage() {
       <section className="py-24">
         <Container>
           <div className="mx-auto max-w-4xl text-center">
-            <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-1.5 text-xs font-bold uppercase tracking-widest text-[var(--muted)]">
+            <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-1.5 text-xs font-bold tracking-widest text-[var(--muted)] uppercase">
               Safety First
             </div>
-            <h2 className="mt-8 font-display text-3xl font-bold tracking-tight text-white sm:text-4xl">
+            <h2 className="font-display mt-8 text-3xl font-bold tracking-tight text-white sm:text-4xl">
               Professional guidance with safety in mind.
             </h2>
             <p className="mx-auto mt-6 max-w-2xl text-lg leading-relaxed text-[var(--muted)]">

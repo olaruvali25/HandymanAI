@@ -58,10 +58,11 @@ const applyGrant = async (
   await ctx.db.patch(args.userId, {
     credits: nextCredits,
     updatedAt: now,
-    lastPlanCreditGrantAt: args.type === "topup" ? user.lastPlanCreditGrantAt : now,
+    lastPlanCreditGrantAt:
+      args.type === "topup" ? user.lastPlanCreditGrantAt : now,
     lastPlanCreditGrantPeriodKey:
       args.type === "plan_monthly"
-        ? args.periodKey ?? user.lastPlanCreditGrantPeriodKey
+        ? (args.periodKey ?? user.lastPlanCreditGrantPeriodKey)
         : user.lastPlanCreditGrantPeriodKey,
   });
 

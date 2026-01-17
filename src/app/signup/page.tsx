@@ -28,7 +28,8 @@ export default function SignupPage() {
   >(null);
 
   const rawReturnTo = searchParams.get("returnTo");
-  const returnTo = rawReturnTo && rawReturnTo.startsWith("/") ? rawReturnTo : "/";
+  const returnTo =
+    rawReturnTo && rawReturnTo.startsWith("/") ? rawReturnTo : "/";
   const hasConvexUrl = Boolean(process.env.NEXT_PUBLIC_CONVEX_URL);
   const oauthProviders = {
     google: {
@@ -49,16 +50,14 @@ export default function SignupPage() {
     if (lower.includes("missing environment variable")) {
       return `${message}\n\nConvex Auth env vars are missing in the Convex deployment.`;
     }
-    if (
-      provider &&
-      (lower.includes("provider") && lower.includes("not found"))
-    ) {
+    if (provider && lower.includes("provider") && lower.includes("not found")) {
       const meta = oauthProviders[provider];
       return `${meta.label} OAuth isn't configured yet. Set ${meta.envHint} in your Convex env and restart convex dev.`;
     }
     if (
       provider &&
-      (lower.includes("client") && (lower.includes("id") || lower.includes("secret")))
+      lower.includes("client") &&
+      (lower.includes("id") || lower.includes("secret"))
     ) {
       const meta = oauthProviders[provider];
       return `${meta.label} OAuth credentials are missing. Set ${meta.envHint} in your Convex env and restart convex dev.`;
@@ -139,10 +138,11 @@ export default function SignupPage() {
                 }}
               >
                 {!hasConvexUrl ? (
-                  <div className="rounded-[var(--radius-md)] border border-border bg-black/30 px-4 py-3 text-sm text-[var(--muted)]">
+                  <div className="border-border rounded-[var(--radius-md)] border bg-black/30 px-4 py-3 text-sm text-[var(--muted)]">
                     Convex isn’t configured yet. Run{" "}
                     <span className="text-white">npm run dev:convex</span> and
-                    set <span className="text-white">NEXT_PUBLIC_CONVEX_URL</span>{" "}
+                    set{" "}
+                    <span className="text-white">NEXT_PUBLIC_CONVEX_URL</span>{" "}
                     in <span className="text-white">.env.local</span>.
                   </div>
                 ) : null}
@@ -221,18 +221,25 @@ export default function SignupPage() {
                 </div>
 
                 {error ? (
-                  <div className="rounded-[var(--radius-md)] border border-border bg-black/30 px-4 py-3 text-sm text-[var(--accent-soft)]">
+                  <div className="border-border rounded-[var(--radius-md)] border bg-black/30 px-4 py-3 text-sm text-[var(--accent-soft)]">
                     {error}
                   </div>
                 ) : null}
 
-                <Button className="w-full" type="submit" disabled={isSubmitting}>
+                <Button
+                  className="w-full"
+                  type="submit"
+                  disabled={isSubmitting}
+                >
                   {isSubmitting ? "Creating account..." : "Create Account"}
                 </Button>
 
                 <div className="text-center text-sm text-[var(--muted)]">
                   Already have an account?{" "}
-                  <Link className="text-white underline underline-offset-4" href="/login">
+                  <Link
+                    className="text-white underline underline-offset-4"
+                    href="/login"
+                  >
                     Log in
                   </Link>
                 </div>

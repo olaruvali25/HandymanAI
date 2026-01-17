@@ -16,6 +16,7 @@ import type * as http from "../http.js";
 import type * as plans from "../plans.js";
 import type * as tasks from "../tasks.js";
 import type * as users from "../users.js";
+import type * as validators_chat from "../validators/chat.js";
 
 import type {
   ApiFromModules,
@@ -32,6 +33,7 @@ declare const fullApi: ApiFromModules<{
   plans: typeof plans;
   tasks: typeof tasks;
   users: typeof users;
+  "validators/chat": typeof validators_chat;
 }>;
 
 /**

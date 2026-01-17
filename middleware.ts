@@ -6,11 +6,24 @@ import {
 
 const isProtectedRoute = createRouteMatcher(["/tasks(.*)"]);
 
-export default convexAuthNextjsMiddleware(async (request, { convexAuth }) => {
-  if (isProtectedRoute(request) && !(await convexAuth.isAuthenticated())) {
-    return nextjsMiddlewareRedirect(request, "/login");
-  }
-});
+export default convexAuthNextjsMiddleware(
+  async (request, { convexAuth }) => {
+    if (isProtectedRoute(request)) {
+      const url = request.nextUrl;
+      // Let OAuth callback land and exchange the code for tokens on the client.
+      if (url.searchParams.has("code")) {
+        return;
+      }
+      if (!(await convexAuth.isAuthenticated())) {
+        return nextjsMiddlewareRedirect(request, "/login");
+      }
+    }
+  },
+  {
+    // Avoid proxying /api/auth so the local route handler can return the OAuth verifier.
+    apiRoute: "/api/auth-proxy",
+  },
+);
 
 export const config = {
   matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],

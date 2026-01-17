@@ -108,10 +108,7 @@ const validatePayload = (body: ChatRequestBody) => {
   let totalChars = 0;
 
   for (const message of body.messages) {
-    if (
-      message.role !== "user" &&
-      message.role !== "assistant"
-    ) {
+    if (message.role !== "user" && message.role !== "assistant") {
       return "Invalid message role.";
     }
 
@@ -129,7 +126,6 @@ const validatePayload = (body: ChatRequestBody) => {
       return "Message payload too large.";
     }
   }
-
 
   return null;
 };
@@ -186,8 +182,7 @@ export async function POST(req: Request) {
       const sendEvent = (event: string, data: object) => {
         controller.enqueue(
           encoder.encode(
-            `event: ${event}\n` +
-              `data: ${JSON.stringify(data)}\n\n`,
+            `event: ${event}\n` + `data: ${JSON.stringify(data)}\n\n`,
           ),
         );
       };

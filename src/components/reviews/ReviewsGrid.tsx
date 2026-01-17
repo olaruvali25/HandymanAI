@@ -47,10 +47,11 @@ export default function ReviewsGrid({ reviews }: ReviewsGridProps) {
               key={filter}
               type="button"
               onClick={() => setActiveFilter(filter)}
-              className={`rounded-full border px-5 py-2.5 text-xs font-bold uppercase tracking-widest transition-all duration-200 ${isActive
+              className={`rounded-full border px-5 py-2.5 text-xs font-bold tracking-widest uppercase transition-all duration-200 ${
+                isActive
                   ? "border-[var(--accent)] bg-[var(--accent)] text-black shadow-[0_0_20px_-5px_var(--accent)]"
                   : "border-white/10 bg-white/5 text-white/60 hover:border-white/20 hover:bg-white/10 hover:text-white"
-                }`}
+              }`}
             >
               {filter}
             </button>
@@ -69,7 +70,7 @@ export default function ReviewsGrid({ reviews }: ReviewsGridProps) {
                 <div className="text-lg font-semibold text-white">
                   {review.name}
                 </div>
-                <div className="text-xs font-medium uppercase tracking-widest text-[var(--muted)]">
+                <div className="text-xs font-medium tracking-widest text-[var(--muted)] uppercase">
                   {review.region}
                 </div>
               </div>
@@ -82,7 +83,7 @@ export default function ReviewsGrid({ reviews }: ReviewsGridProps) {
             </div>
 
             {review.highlight ? (
-              <div className="mt-4 inline-flex self-start rounded-full bg-[var(--accent)] px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-black shadow-lg shadow-[var(--accent)]/20">
+              <div className="mt-4 inline-flex self-start rounded-full bg-[var(--accent)] px-3 py-1 text-[10px] font-bold tracking-widest text-black uppercase shadow-[var(--accent)]/20 shadow-lg">
                 {review.highlight}
               </div>
             ) : null}
@@ -101,11 +102,11 @@ export default function ReviewsGrid({ reviews }: ReviewsGridProps) {
               ))}
             </div>
 
-            <div className="mt-auto pt-6 flex flex-wrap gap-2">
+            <div className="mt-auto flex flex-wrap gap-2 pt-6">
               {review.tags.map((tag) => (
                 <span
                   key={`${review.id}-${tag}`}
-                  className="rounded-full border border-white/5 bg-white/5 px-3 py-1 text-[10px] font-medium uppercase tracking-widest text-white/50 transition-colors group-hover:border-white/10 group-hover:text-white/70"
+                  className="rounded-full border border-white/5 bg-white/5 px-3 py-1 text-[10px] font-medium tracking-widest text-white/50 uppercase transition-colors group-hover:border-white/10 group-hover:text-white/70"
                 >
                   {tag}
                 </span>

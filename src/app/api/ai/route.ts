@@ -14,6 +14,10 @@ import {
 } from "@/lib/entitlements";
 import { createHash, randomUUID } from "crypto";
 import type { FunctionReference } from "convex/server";
+import {
+  CHAT_MAX_IMAGE_ATTACHMENT_BYTES,
+  type ChatAttachment,
+} from "@/lib/schemas/chat";
 
 type IncomingMessage = {
   role: "user" | "assistant";
@@ -28,12 +32,7 @@ type AiRequestBody = {
   threadId?: string;
   anonymousId?: string;
   guestChatId?: string;
-  attachments?: {
-    name: string;
-    type: string;
-    dataUrl: string;
-    size: number;
-  }[];
+  attachments?: ChatAttachment[];
 };
 
 const MAX_MESSAGES = 50;
@@ -51,7 +50,7 @@ class BoundedMap<K, V> {
   constructor(
     private readonly maxEntries: number,
     private readonly ttlMs: number,
-  ) { }
+  ) {}
 
   private prune(now = Date.now()) {
     for (const [key, entry] of this.map) {
@@ -100,10 +99,10 @@ class BoundedMap<K, V> {
   }
 }
 
-const SCOPE_CACHE = new BoundedMap<
-  string,
-  { text: string; updatedAt: number }
->(CACHE_MAX_ENTRIES, CACHE_TTL_MS);
+const SCOPE_CACHE = new BoundedMap<string, { text: string; updatedAt: number }>(
+  CACHE_MAX_ENTRIES,
+  CACHE_TTL_MS,
+);
 
 const serializeMessages = (messages: IncomingMessage[]) => {
   return messages
@@ -153,32 +152,45 @@ const validatePayload = (body: AiRequestBody, hasAttachments: boolean) => {
   return null;
 };
 
-const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
-
 const sanitizeAttachments = (attachments?: AiRequestBody["attachments"]) => {
-  if (!attachments || attachments.length === 0) return [];
-  return attachments
-    .filter(
-      (attachment) =>
-        attachment &&
-        typeof attachment.dataUrl === "string" &&
-        attachment.dataUrl.startsWith("data:image/") &&
-        (attachment.size ?? 0) > 0 &&
-        (attachment.size ?? 0) <= MAX_ATTACHMENT_BYTES,
-    )
-    .map((attachment) => ({
-      name: attachment.name ?? "upload",
-      type: attachment.type ?? "",
-      dataUrl: attachment.dataUrl,
-      size: attachment.size ?? 0,
-    }));
+  if (!Array.isArray(attachments) || attachments.length === 0) return [];
+
+  const getDataUrlSizeBytes = (dataUrl: string) => {
+    const commaIndex = dataUrl.indexOf(",");
+    if (commaIndex === -1) return null;
+    const meta = dataUrl.slice(0, commaIndex);
+    if (!/;base64$/i.test(meta)) return null;
+    const base64 = dataUrl.slice(commaIndex + 1);
+    if (base64.length === 0) return null;
+    const padding = base64.endsWith("==") ? 2 : base64.endsWith("=") ? 1 : 0;
+    const size = Math.floor((base64.length * 3) / 4) - padding;
+    return Number.isFinite(size) && size >= 0 ? size : null;
+  };
+
+  return attachments.flatMap((attachment) => {
+    if (!attachment || typeof attachment.dataUrl !== "string") return [];
+    if (!attachment.dataUrl.startsWith("data:image/")) return [];
+
+    const size = getDataUrlSizeBytes(attachment.dataUrl);
+    if (typeof size !== "number" || size <= 0) return [];
+    if (size > CHAT_MAX_IMAGE_ATTACHMENT_BYTES) return [];
+
+    return [
+      {
+        name: attachment.name ?? "upload",
+        type: attachment.type ?? "",
+        dataUrl: attachment.dataUrl,
+        size,
+      },
+    ];
+  });
 };
 
 const filesToAttachments = async (files: File[]) => {
   const attachments = [];
   for (const file of files) {
     if (!file.type.startsWith("image/")) continue;
-    if (file.size <= 0 || file.size > MAX_ATTACHMENT_BYTES) continue;
+    if (file.size <= 0 || file.size > CHAT_MAX_IMAGE_ATTACHMENT_BYTES) continue;
     const buffer = Buffer.from(await file.arrayBuffer());
     const base64 = buffer.toString("base64");
     attachments.push({
@@ -245,10 +257,7 @@ const getResponseOutputText = (response: unknown) => {
   return typeof part?.text === "string" ? part.text.trim() : "";
 };
 
-const getAnonymousId = (
-  req: Request,
-  body: AiRequestBody | null,
-) => {
+const getAnonymousId = (req: Request, body: AiRequestBody | null) => {
   const cookies = parseCookies(req.headers.get("cookie"));
   const fromBody = body?.anonymousId ?? body?.guestChatId ?? null;
   const fromCookie = cookies[ANON_COOKIE] ?? null;
@@ -282,10 +291,7 @@ const logEvent = (message: string, data?: Record<string, unknown>) => {
 
 const CONVEX_TIMEOUT_MS = 5000;
 
-const withTimeout = async <T>(
-  promise: Promise<T>,
-  ms = CONVEX_TIMEOUT_MS,
-) => {
+const withTimeout = async <T>(promise: Promise<T>, ms = CONVEX_TIMEOUT_MS) => {
   let timer: NodeJS.Timeout | undefined;
   try {
     return await Promise.race([
@@ -308,7 +314,12 @@ type GetCreditsQuery = FunctionReference<
 type ReserveCreditsMutation = FunctionReference<
   "mutation",
   "public",
-  { anonymousId?: string; turnId: string; cost: number; minimumCredits?: number },
+  {
+    anonymousId?: string;
+    turnId: string;
+    cost: number;
+    minimumCredits?: number;
+  },
   { credits: number }
 >;
 type ChargeCreditsMutation = FunctionReference<
@@ -361,14 +372,19 @@ export async function GET(req: Request) {
   res.headers.set("X-User-Has-Account", userHasAccount ? "1" : "0");
   res.headers.set("X-Credits", String(credits));
   if (shouldSetAnonCookie && anonymousId) {
-    res.headers.append("Set-Cookie", buildCookieHeader(ANON_COOKIE, anonymousId));
+    res.headers.append(
+      "Set-Cookie",
+      buildCookieHeader(ANON_COOKIE, anonymousId),
+    );
   }
 
   return res;
 }
 
 export async function POST(req: Request) {
-  logEvent("[ai] POST /api/ai start", { streamingDisabled: STREAMING_DISABLED });
+  logEvent("[ai] POST /api/ai start", {
+    streamingDisabled: STREAMING_DISABLED,
+  });
   let body: AiRequestBody | null = null;
   let attachmentsFromForm: AiRequestBody["attachments"] = [];
   const contentType = req.headers.get("content-type") ?? "";
@@ -376,12 +392,12 @@ export async function POST(req: Request) {
   if (contentType.includes("multipart/form-data")) {
     try {
       const form = await req.formData();
-      const rawPayload =
-        form.get("payload") ??
-        form.get("messages");
+      const rawPayload = form.get("payload") ?? form.get("messages");
       if (typeof rawPayload === "string") {
         try {
-          const parsed = JSON.parse(rawPayload) as AiRequestBody | IncomingMessage[];
+          const parsed = JSON.parse(rawPayload) as
+            | AiRequestBody
+            | IncomingMessage[];
           if (Array.isArray(parsed)) {
             body = { messages: parsed };
           } else {
@@ -420,7 +436,10 @@ export async function POST(req: Request) {
         attachmentsFromForm = await filesToAttachments(files);
       }
     } catch {
-      return NextResponse.json({ error: "Invalid form data." }, { status: 400 });
+      return NextResponse.json(
+        { error: "Invalid form data." },
+        { status: 400 },
+      );
     }
   } else {
     try {
@@ -430,11 +449,13 @@ export async function POST(req: Request) {
     }
   }
 
+  const attachments =
+    attachmentsFromForm.length > 0
+      ? sanitizeAttachments(attachmentsFromForm)
+      : sanitizeAttachments(body?.attachments);
+
   const validationError = body
-    ? validatePayload(
-      body,
-      attachmentsFromForm.length > 0 || (body.attachments?.length ?? 0) > 0,
-    )
+    ? validatePayload(body, attachments.length > 0)
     : "Invalid payload.";
   if (validationError) {
     return NextResponse.json({ error: validationError }, { status: 400 });
@@ -444,7 +465,7 @@ export async function POST(req: Request) {
   const token = getConvexAuthToken(cookieHeader);
   const userHasAccount = Boolean(token);
   const { fromBody, fromCookie } = getAnonymousId(req, body);
-  let anonymousId = userHasAccount ? null : fromBody ?? fromCookie;
+  let anonymousId = userHasAccount ? null : (fromBody ?? fromCookie);
   let shouldSetAnonCookie = false;
   if (!userHasAccount && !anonymousId) {
     anonymousId = randomUUID();
@@ -458,10 +479,6 @@ export async function POST(req: Request) {
     );
   }
 
-  const attachments =
-    attachmentsFromForm.length > 0
-      ? sanitizeAttachments(attachmentsFromForm)
-      : sanitizeAttachments(body.attachments);
   const hasImageAttachments = attachments.length > 0;
   const userCost = 1 + (hasImageAttachments ? 15 : 0);
   const assistantCost = 2 + (hasImageAttachments ? 5 : 0);
@@ -503,7 +520,10 @@ export async function POST(req: Request) {
       { status: 503 },
     );
     if (anonymousId && (!fromCookie || shouldSetAnonCookie)) {
-      res.headers.append("Set-Cookie", buildCookieHeader(ANON_COOKIE, anonymousId));
+      res.headers.append(
+        "Set-Cookie",
+        buildCookieHeader(ANON_COOKIE, anonymousId),
+      );
     }
     return res;
   }
@@ -570,7 +590,9 @@ export async function POST(req: Request) {
         [...body!.messages].reverse().find((m) => m.role === "user")?.content ??
         "";
       const shouldRecomputeScope =
-        !threadId || hasScopeCues(lastUserMessage) || !SCOPE_CACHE.has(threadId);
+        !threadId ||
+        hasScopeCues(lastUserMessage) ||
+        !SCOPE_CACHE.has(threadId);
       let scopeText = "";
 
       const scopeStart = Date.now();
@@ -699,10 +721,12 @@ export async function POST(req: Request) {
 
       try {
         const lastUserMessage =
-          [...body!.messages].reverse().find((m) => m.role === "user")?.content ??
-          "";
+          [...body!.messages].reverse().find((m) => m.role === "user")
+            ?.content ?? "";
         const shouldRecomputeScope =
-          !threadId || hasScopeCues(lastUserMessage) || !SCOPE_CACHE.has(threadId);
+          !threadId ||
+          hasScopeCues(lastUserMessage) ||
+          !SCOPE_CACHE.has(threadId);
         let scopeText = "";
 
         const scopeStart = Date.now();
@@ -767,13 +791,13 @@ export async function POST(req: Request) {
           | { type: "input_text"; text: string }
           | { type: "input_image"; image_url: string; detail: "auto" }
         > = [
-            { type: "input_text", text: primaryInput },
-            ...attachments.map((attachment) => ({
-              type: "input_image" as const,
-              image_url: attachment.dataUrl,
-              detail: "auto" as const,
-            })),
-          ];
+          { type: "input_text", text: primaryInput },
+          ...attachments.map((attachment) => ({
+            type: "input_image" as const,
+            image_url: attachment.dataUrl,
+            detail: "auto" as const,
+          })),
+        ];
 
         const primaryStream = await openai.responses.create({
           model,

@@ -96,7 +96,7 @@ export default function PricingPage() {
               <CreditsStatus />
             </div>
             <div className="rounded-3xl border border-white/10 bg-white/5 p-8 shadow-2xl backdrop-blur-sm">
-              <div className="text-xs font-medium uppercase tracking-widest text-[var(--muted)]">
+              <div className="text-xs font-medium tracking-widest text-[var(--muted)] uppercase">
                 Why credits
               </div>
               <div className="mt-6 grid gap-4">
@@ -127,13 +127,14 @@ export default function PricingPage() {
             {plans.map((plan) => (
               <div
                 key={plan.name}
-                className={`group relative flex h-full flex-col rounded-3xl border p-8 shadow-2xl backdrop-blur-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-black/50 ${plan.badge
-                  ? "border-[var(--accent)]/30 bg-[var(--accent)]/[0.03] hover:border-[var(--accent)]/50 hover:bg-[var(--accent)]/[0.05]"
-                  : "border-white/10 bg-white/5 hover:border-white/20 hover:bg-white/[0.07]"
-                  }`}
+                className={`group relative flex h-full flex-col rounded-3xl border p-8 shadow-2xl backdrop-blur-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-black/50 ${
+                  plan.badge
+                    ? "border-[var(--accent)]/30 bg-[var(--accent)]/[0.03] hover:border-[var(--accent)]/50 hover:bg-[var(--accent)]/[0.05]"
+                    : "border-white/10 bg-white/5 hover:border-white/20 hover:bg-white/[0.07]"
+                }`}
               >
                 {plan.badge ? (
-                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-[var(--accent)] px-4 py-1 text-[10px] font-bold uppercase tracking-widest text-black shadow-lg shadow-[var(--accent)]/20">
+                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-[var(--accent)] px-4 py-1 text-[10px] font-bold tracking-widest text-black uppercase shadow-[var(--accent)]/20 shadow-lg">
                     {plan.badge}
                   </div>
                 ) : null}
@@ -144,12 +145,12 @@ export default function PricingPage() {
                   <div className="text-4xl font-bold tracking-tight text-white">
                     {plan.price}
                   </div>
-                  <div className="text-xs font-medium uppercase tracking-widest text-[var(--muted)]">
+                  <div className="text-xs font-medium tracking-widest text-[var(--muted)] uppercase">
                     {plan.cadence}
                   </div>
                 </div>
                 <div className="mt-6 rounded-xl border border-white/5 bg-black/20 px-4 py-4 text-center">
-                  <div className="text-xs font-medium uppercase tracking-widest text-[var(--muted)]">
+                  <div className="text-xs font-medium tracking-widest text-[var(--muted)] uppercase">
                     Credits per month
                   </div>
                   <div className="mt-1 text-3xl font-bold text-white">
@@ -170,10 +171,11 @@ export default function PricingPage() {
                 <div className="mt-auto pt-8">
                   <Link
                     href={plan.href}
-                    className={`inline-flex w-full items-center justify-center rounded-full px-6 py-4 text-sm font-semibold transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] ${plan.badge
-                      ? "bg-[var(--accent)] text-black shadow-[0_0_20px_-5px_var(--accent)] hover:bg-[var(--accent)]/90 hover:shadow-[0_0_25px_-5px_var(--accent)]"
-                      : "border border-white/10 bg-white/5 text-white hover:bg-white/10"
-                      }`}
+                    className={`inline-flex w-full items-center justify-center rounded-full px-6 py-4 text-sm font-semibold transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] ${
+                      plan.badge
+                        ? "bg-[var(--accent)] text-black shadow-[0_0_20px_-5px_var(--accent)] hover:bg-[var(--accent)]/90 hover:shadow-[0_0_25px_-5px_var(--accent)]"
+                        : "border border-white/10 bg-white/5 text-white hover:bg-white/10"
+                    }`}
                   >
                     {plan.cta}
                   </Link>
@@ -218,7 +220,7 @@ export default function PricingPage() {
             {creditCosts.map((row) => (
               <div
                 key={row.label}
-                className="flex items-center justify-between gap-4 border-b border-white/5 px-8 py-6 text-sm text-white/80 transition-colors hover:bg-white/5 last:border-b-0"
+                className="flex items-center justify-between gap-4 border-b border-white/5 px-8 py-6 text-sm text-white/80 transition-colors last:border-b-0 hover:bg-white/5"
               >
                 <span className="font-medium text-white">{row.label}</span>
                 <span className="text-[var(--muted)]">{row.value}</span>
@@ -252,8 +254,6 @@ export default function PricingPage() {
         </Container>
       </section>
 
-
-
       <section className="pb-24">
         <Container>
           <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-white/5 px-8 py-12 text-center shadow-2xl backdrop-blur-sm md:px-12 md:text-left">
@@ -267,13 +267,13 @@ export default function PricingPage() {
               <div className="flex flex-wrap justify-center gap-4">
                 <Link
                   href="/"
-                  className="inline-flex items-center justify-center rounded-full bg-[var(--accent)] px-8 py-4 text-sm font-semibold text-black shadow-[0_0_20px_-5px_var(--accent)] transition-all duration-200 hover:bg-[var(--accent)]/90 hover:scale-[1.02] hover:shadow-[0_0_25px_-5px_var(--accent)] active:scale-[0.98]"
+                  className="inline-flex items-center justify-center rounded-full bg-[var(--accent)] px-8 py-4 text-sm font-semibold text-black shadow-[0_0_20px_-5px_var(--accent)] transition-all duration-200 hover:scale-[1.02] hover:bg-[var(--accent)]/90 hover:shadow-[0_0_25px_-5px_var(--accent)] active:scale-[0.98]"
                 >
                   Start a chat
                 </Link>
                 <Link
                   href="/pricing?topup=1"
-                  className="inline-flex items-center justify-center rounded-full border border-white/10 bg-white/5 px-8 py-4 text-sm font-semibold text-white transition-all duration-200 hover:bg-white/10 hover:scale-[1.02] active:scale-[0.98]"
+                  className="inline-flex items-center justify-center rounded-full border border-white/10 bg-white/5 px-8 py-4 text-sm font-semibold text-white transition-all duration-200 hover:scale-[1.02] hover:bg-white/10 active:scale-[0.98]"
                 >
                   Add credits
                 </Link>

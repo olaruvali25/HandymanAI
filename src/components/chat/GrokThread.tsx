@@ -16,6 +16,8 @@ import {
 import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import type { Id } from "@convex/_generated/dataModel";
 import { api } from "@convex/_generated/api";
+import { useQueryClient } from "@tanstack/react-query";
+import { useShallow } from "zustand/shallow";
 import {
   AssistantRuntimeProvider,
   ComposerPrimitive,
@@ -29,6 +31,16 @@ import {
   type ThreadUserMessagePart,
   type ThreadMessage,
 } from "@assistant-ui/react";
+import type { ChatAttachment, ChatMessageRole } from "@/lib/schemas/chat";
+import {
+  ClientEntitlementsSchema,
+  type ClientEntitlements,
+} from "@/lib/schemas/entitlements";
+import {
+  entitlementsQueryKey,
+  useEntitlementsQuery,
+} from "@/lib/queries/entitlements";
+import { useUserPreferencesStore } from "@/lib/stores/user-preferences";
 
 type SpeechRecognitionResultLike = {
   transcript?: string;
@@ -57,22 +69,7 @@ type WindowWithSpeechRecognition = Window & {
   webkitSpeechRecognition?: SpeechRecognitionConstructor;
 };
 
-type Entitlements = {
-  userHasAccount: boolean;
-  userPlan: string;
-  remainingReplies: number | null;
-  remainingSource?: "memory" | "cookie" | "init" | "unlimited";
-  credits?: number;
-  capabilities: {
-    voice: boolean;
-    photos: boolean;
-    linksVisuals: boolean;
-  };
-  gating: {
-    must_prompt_signup_after_this: boolean;
-    must_prompt_payment_after_this: boolean;
-  };
-};
+type Entitlements = ClientEntitlements;
 
 type HistoryThread = {
   id: Id<"chatThreads">;
@@ -82,10 +79,10 @@ type HistoryThread = {
 };
 
 type HistoryMessage = {
-  role: "user" | "assistant" | "system";
+  role: ChatMessageRole;
   contentText: string;
   createdAt: number;
-  attachments?: unknown[];
+  attachments?: ChatAttachment[];
 };
 
 const defaultEntitlements: Entitlements = {
@@ -93,7 +90,16 @@ const defaultEntitlements: Entitlements = {
   userPlan: "none",
   remainingReplies: null,
   credits: undefined,
-  capabilities: { voice: false, photos: false, linksVisuals: false },
+  remainingSource: undefined,
+  capabilities: {
+    voice: false,
+    photos: false,
+    linksVisuals: false,
+    history: false,
+    favorites: false,
+    premiumVisuals: "none",
+    photoLimit: null,
+  },
   gating: {
     must_prompt_signup_after_this: false,
     must_prompt_payment_after_this: false,
@@ -134,8 +140,8 @@ const EntitlementsContext = createContext<{
   entitlements: defaultEntitlements,
   entitlementsSource: "init",
   messageActions: null,
-  setEntitlements: () => { },
-  setMessageActions: () => { },
+  setEntitlements: () => {},
+  setMessageActions: () => {},
 });
 
 const useEntitlements = () => useContext(EntitlementsContext);
@@ -150,7 +156,9 @@ const extractText = (message: ThreadMessage) => {
 
 const buildPayloadMessages = (messages: readonly ThreadMessage[]) => {
   return messages
-    .filter((message) => message.role === "user" || message.role === "assistant")
+    .filter(
+      (message) => message.role === "user" || message.role === "assistant",
+    )
     .map((message) => ({
       role: message.role,
       content: extractText(message).trim(),
@@ -226,11 +234,14 @@ const createChatAdapter = (options?: {
         try {
           const errorPayload = (await response.json()) as {
             error?: string;
-            entitlements?: Entitlements;
+            entitlements?: unknown;
             actions?: MessageActions;
           };
-          if (errorPayload?.entitlements) {
-            options?.onEntitlements?.(errorPayload.entitlements);
+          const entitlements = ClientEntitlementsSchema.safeParse(
+            errorPayload?.entitlements,
+          );
+          if (entitlements.success) {
+            options?.onEntitlements?.(entitlements.data);
           }
           if (errorPayload?.error) {
             errorMessage = errorPayload.error;
@@ -276,10 +287,13 @@ const createChatAdapter = (options?: {
           if (eventName === "meta") {
             try {
               const payload = JSON.parse(data) as {
-                entitlements?: Entitlements;
+                entitlements?: unknown;
               };
-              if (payload.entitlements) {
-                options?.onEntitlements?.(payload.entitlements);
+              const entitlements = ClientEntitlementsSchema.safeParse(
+                payload.entitlements,
+              );
+              if (entitlements.success) {
+                options?.onEntitlements?.(entitlements.data);
               }
             } catch {
               continue;
@@ -328,7 +342,11 @@ const createChatAdapter = (options?: {
                   text: "Sorry, something went wrong. Try again.",
                 },
               ],
-              status: { type: "incomplete", reason: "error", error: "api_error" },
+              status: {
+                type: "incomplete",
+                reason: "error",
+                error: "api_error",
+              },
             };
             return;
           }
@@ -447,11 +465,7 @@ function ArrowUpIcon() {
 
 function SquareIcon() {
   return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="currentColor"
-      className="h-4 w-4"
-    >
+    <svg viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4">
       <rect x="7" y="7" width="10" height="10" rx="2" />
     </svg>
   );
@@ -518,8 +532,7 @@ const getUiAttachments = (
         return {
           id: `image-${index}`,
           kind: "image",
-          name:
-            (part as { filename?: string }).filename ?? "Image",
+          name: (part as { filename?: string }).filename ?? "Image",
           mime: "image",
           size: 0,
           previewUrl: (part as { image: string }).image,
@@ -557,7 +570,9 @@ const ChatMessage = () => {
     status.reason === "error";
   const isLastAssistant = useAssistantState((state) => {
     const messages = state.thread.messages;
-    const lastAssistant = [...messages].reverse().find((message) => message.role === "assistant");
+    const lastAssistant = [...messages]
+      .reverse()
+      .find((message) => message.role === "assistant");
     if (!lastAssistant) return false;
     if ("id" in lastAssistant && "id" in state.message) {
       return lastAssistant.id === (state.message as typeof lastAssistant).id;
@@ -570,10 +585,10 @@ const ChatMessage = () => {
   const fileAttachments = attachments.filter((item) => item.kind === "file");
   const textContent = Array.isArray(messageContent)
     ? messageContent
-      .filter((part) => part.type === "text" && "text" in part)
-      .map((part) => (part as { text: string }).text)
-      .filter(Boolean)
-      .join("\n")
+        .filter((part) => part.type === "text" && "text" in part)
+        .map((part) => (part as { text: string }).text)
+        .filter(Boolean)
+        .join("\n")
     : "";
 
   return (
@@ -582,12 +597,13 @@ const ChatMessage = () => {
         className={`flex w-full ${isUser ? "justify-end" : "justify-start"}`}
       >
         <div
-          className={`max-w-[85%] rounded-2xl px-5 py-3 text-left shadow-sm ${isUser
-            ? "bg-[var(--accent)] text-white"
-            : isError
-              ? "border border-red-500/40 bg-red-500/10 text-red-100 text-sm"
-              : "border border-[var(--border)] bg-[var(--bg-elev)] text-[var(--text)] text-base"
-            }`}
+          className={`max-w-[85%] rounded-2xl px-5 py-3 text-left shadow-sm ${
+            isUser
+              ? "bg-[var(--accent)] text-white"
+              : isError
+                ? "border border-red-500/40 bg-red-500/10 text-sm text-red-100"
+                : "border border-[var(--border)] bg-[var(--bg-elev)] text-base text-[var(--text)]"
+          }`}
         >
           <div className="flex flex-col gap-3">
             {imageAttachments.length > 0 && (
@@ -648,10 +664,11 @@ const ChatMessage = () => {
               <a
                 key={`${action.label}-${action.href}`}
                 href={action.href}
-                className={`inline-flex items-center justify-center rounded-full px-4 py-2 text-xs font-semibold transition ${isPrimary
-                  ? "bg-[var(--accent)] text-black hover:bg-[var(--accent-soft)]"
-                  : "border border-[var(--border)] text-white hover:border-white/40"
-                  }`}
+                className={`inline-flex items-center justify-center rounded-full px-4 py-2 text-xs font-semibold transition ${
+                  isPrimary
+                    ? "bg-[var(--accent)] text-black hover:bg-[var(--accent-soft)]"
+                    : "border border-[var(--border)] text-white hover:border-white/40"
+                }`}
               >
                 {action.label}
               </a>
@@ -934,11 +951,7 @@ const Composer = ({
           </button>
         </div>
       )}
-      {micError && (
-        <div className="mb-3 text-xs text-red-200">
-          {micError}
-        </div>
-      )}
+      {micError && <div className="mb-3 text-xs text-red-200">{micError}</div>}
 
       <div className="relative flex items-end gap-3 rounded-3xl border border-[var(--border)] bg-[var(--bg-elev)]/80 p-4 shadow-2xl backdrop-blur-xl transition-all focus-within:border-[var(--accent)]/50 focus-within:ring-1 focus-within:ring-[var(--accent)]/50 hover:border-[var(--accent)]/30">
         <button
@@ -991,8 +1004,9 @@ const Composer = ({
           <button
             type="button"
             onClick={() => setIsMenuOpen(!isMenuOpen)}
-            className={`flex h-10 w-10 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--surface)] text-[var(--muted)] transition hover:border-[var(--accent)]/50 hover:text-[var(--text)] ${isMenuOpen ? "border-[var(--accent)] text-[var(--text)]" : ""
-              }`}
+            className={`flex h-10 w-10 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--surface)] text-[var(--muted)] transition hover:border-[var(--accent)]/50 hover:text-[var(--text)] ${
+              isMenuOpen ? "border-[var(--accent)] text-[var(--text)]" : ""
+            }`}
             aria-label="More options"
             aria-expanded={isMenuOpen}
           >
@@ -1000,7 +1014,7 @@ const Composer = ({
           </button>
 
           {isMenuOpen && (
-            <div className="absolute bottom-full right-0 mb-2 flex w-48 flex-col gap-2 rounded-xl border border-[var(--border)] bg-[var(--bg-elev)] p-2 shadow-xl backdrop-blur-xl">
+            <div className="absolute right-0 bottom-full mb-2 flex w-48 flex-col gap-2 rounded-xl border border-[var(--border)] bg-[var(--bg-elev)] p-2 shadow-xl backdrop-blur-xl">
               <button
                 type="button"
                 onClick={() => {
@@ -1026,7 +1040,13 @@ const Composer = ({
                 className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-[var(--text)] transition ${canVoice ? "hover:bg-[var(--surface)]" : "cursor-not-allowed opacity-50"}`}
                 disabled={!canVoice}
               >
-                <span className={speechEnabled ? "text-[var(--accent)]" : "text-[var(--muted)]"}>
+                <span
+                  className={
+                    speechEnabled
+                      ? "text-[var(--accent)]"
+                      : "text-[var(--muted)]"
+                  }
+                >
                   {speechEnabled ? "Voice On" : "Voice Off"}
                 </span>
               </button>
@@ -1040,10 +1060,11 @@ const Composer = ({
                     type="button"
                     onClick={() => setVoiceGender("female")}
                     disabled={!canVoice}
-                    className={`flex-1 rounded-md py-1 text-xs font-medium transition ${voiceGender === "female"
-                      ? "bg-[var(--bg-elev)] text-[var(--text)] shadow-sm"
-                      : "text-[var(--muted)] hover:text-[var(--text)]"
-                      }`}
+                    className={`flex-1 rounded-md py-1 text-xs font-medium transition ${
+                      voiceGender === "female"
+                        ? "bg-[var(--bg-elev)] text-[var(--text)] shadow-sm"
+                        : "text-[var(--muted)] hover:text-[var(--text)]"
+                    }`}
                   >
                     Female
                   </button>
@@ -1051,10 +1072,11 @@ const Composer = ({
                     type="button"
                     onClick={() => setVoiceGender("male")}
                     disabled={!canVoice}
-                    className={`flex-1 rounded-md py-1 text-xs font-medium transition ${voiceGender === "male"
-                      ? "bg-[var(--bg-elev)] text-[var(--text)] shadow-sm"
-                      : "text-[var(--muted)] hover:text-[var(--text)]"
-                      }`}
+                    className={`flex-1 rounded-md py-1 text-xs font-medium transition ${
+                      voiceGender === "male"
+                        ? "bg-[var(--bg-elev)] text-[var(--text)] shadow-sm"
+                        : "text-[var(--muted)] hover:text-[var(--text)]"
+                    }`}
                   >
                     Male
                   </button>
@@ -1064,15 +1086,18 @@ const Composer = ({
           )}
         </div>
 
-        <div className={`relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--accent)] text-white transition ${canVoice ? "hover:bg-[var(--accent-soft)]" : "opacity-50"}`}>
+        <div
+          className={`relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--accent)] text-white transition ${canVoice ? "hover:bg-[var(--accent-soft)]" : "opacity-50"}`}
+        >
           <button
             type="button"
             onClick={handleMicClick}
             aria-pressed={isListening}
-            className={`absolute inset-0 flex items-center justify-center transition ${isListening
-              ? ""
-              : "group-data-[empty=false]/composer:scale-0 group-data-[empty=false]/composer:opacity-0"
-              }`}
+            className={`absolute inset-0 flex items-center justify-center transition ${
+              isListening
+                ? ""
+                : "group-data-[empty=false]/composer:scale-0 group-data-[empty=false]/composer:opacity-0"
+            }`}
             disabled={!canVoice}
           >
             {isListening ? <SquareIcon /> : <MicIcon />}
@@ -1091,8 +1116,9 @@ const Composer = ({
                 handleRemoveFile();
               }
             }}
-            className={`absolute inset-0 flex items-center justify-center transition group-data-[empty=true]/composer:scale-0 group-data-[empty=true]/composer:opacity-0 ${isListening ? "pointer-events-none scale-0 opacity-0" : ""
-              }`}
+            className={`absolute inset-0 flex items-center justify-center transition group-data-[empty=true]/composer:scale-0 group-data-[empty=true]/composer:opacity-0 ${
+              isListening ? "pointer-events-none scale-0 opacity-0" : ""
+            }`}
           >
             <ArrowUpIcon />
           </button>
@@ -1132,7 +1158,7 @@ const ComposerContainer = ({
 }) => {
   if (!isVisible) return null;
   return (
-    <div className="sticky bottom-0 mt-auto shrink-0 bg-gradient-to-t from-[var(--bg)] to-transparent pb-4 pt-2">
+    <div className="sticky bottom-0 mt-auto shrink-0 bg-gradient-to-t from-[var(--bg)] to-transparent pt-2 pb-4">
       {children}
     </div>
   );
@@ -1152,6 +1178,8 @@ export default function GrokThread({
   initialThreadId?: string | null;
 }) {
   const { isAuthenticated } = useConvexAuth();
+  const queryClient = useQueryClient();
+  const { data: initialEntitlements } = useEntitlementsQuery();
   const [guestChatId, setGuestChatId] = useState<string | null>(() => {
     if (typeof window === "undefined") return null;
     const existing = localStorage.getItem("fixly_guest_chat_id");
@@ -1162,16 +1190,30 @@ export default function GrokThread({
     return created;
   });
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [selectedLanguage, setSelectedLanguage] = useState("auto");
-  const [speechEnabled, setSpeechEnabled] = useState(true);
-  const [voiceGender, setVoiceGender] = useState<"female" | "male">("female");
-  const [entitlements, setEntitlements] =
-    useState<Entitlements>(defaultEntitlements);
-  const [entitlementsSource, setEntitlementsSource] = useState<
-    "init" | "api"
-  >("init");
-  const [messageActions, setMessageActions] =
-    useState<MessageActions | null>(null);
+  const {
+    selectedLanguage,
+    setSelectedLanguage,
+    speechEnabled,
+    setSpeechEnabled,
+    voiceGender,
+    setVoiceGender,
+  } = useUserPreferencesStore(
+    useShallow((state) => ({
+      selectedLanguage: state.selectedLanguage,
+      setSelectedLanguage: state.setSelectedLanguage,
+      speechEnabled: state.speechEnabled,
+      setSpeechEnabled: state.setSpeechEnabled,
+      voiceGender: state.voiceGender,
+      setVoiceGender: state.setVoiceGender,
+    })),
+  );
+  const [entitlementsSource, setEntitlementsSource] = useState<"init" | "api">(
+    "init",
+  );
+  const entitlements = initialEntitlements ?? defaultEntitlements;
+  const [messageActions, setMessageActions] = useState<MessageActions | null>(
+    null,
+  );
   const prevRemainingRef = useRef<number | null>(null);
   const [activeThreadId, setActiveThreadId] = useState<string | null>(
     initialThreadId,
@@ -1188,9 +1230,9 @@ export default function GrokThread({
     api.chatHistory.getThreadMessagesForActor,
     activeThreadId && canUseChatHistory
       ? {
-        threadId: activeThreadId as Id<"chatThreads">,
-        anonymousId: isAuthenticated ? undefined : guestChatId ?? undefined,
-      }
+          threadId: activeThreadId as Id<"chatThreads">,
+          anonymousId: isAuthenticated ? undefined : (guestChatId ?? undefined),
+        }
       : "skip",
   ) as HistoryMessage[] | undefined;
   const createThread = useMutation(api.chatHistory.createThread);
@@ -1200,15 +1242,17 @@ export default function GrokThread({
   const deleteThread = useMutation(api.chatHistory.deleteThread);
   const setEntitlementsWithSource = useCallback(
     (value: Entitlements, source: "init" | "api" = "api") => {
-      setEntitlements(value);
+      queryClient.setQueryData(entitlementsQueryKey, value);
       setEntitlementsSource(source);
     },
-    [],
+    [queryClient],
   );
   const chatAdapter = useMemo(
     () =>
       createChatAdapter({
-        onEntitlements: (next) => setEntitlementsWithSource(next, "api"),
+        onEntitlements: (next) => {
+          setEntitlementsWithSource(next, "api");
+        },
         onMessageActions: setMessageActions,
         anonymousId: guestChatId,
       }),
@@ -1216,31 +1260,12 @@ export default function GrokThread({
   );
   const runtime = useLocalRuntime(chatAdapter);
   const createGuestChatId = buildGuestChatId;
-  useEffect(() => {
-    let isMounted = true;
-    fetch("/api/ai")
-      .then((response) => response.json())
-      .then((data) => {
-        if (!isMounted) return;
-        if (data?.entitlements) {
-          setEntitlementsWithSource(data.entitlements as Entitlements, "init");
-        }
-      })
-      .catch(() => {
-        // Ignore capability fetch errors; server will still enforce.
-      });
-
-    return () => {
-      isMounted = false;
-    };
-  }, [setEntitlementsWithSource]);
 
   useEffect(() => {
     if (!entitlements.capabilities.voice && speechEnabled) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSpeechEnabled(false);
     }
-  }, [entitlements.capabilities.voice, speechEnabled]);
+  }, [entitlements.capabilities.voice, speechEnabled, setSpeechEnabled]);
 
   useEffect(() => {
     if (!entitlements.capabilities.photos && selectedFile) {
@@ -1272,12 +1297,13 @@ export default function GrokThread({
         localStorage.removeItem("fixly_guest_chat_id");
         setGuestChatId(null);
       })
-      .catch(() => { });
+      .catch(() => {});
   }, [guestChatId, isAuthenticated, mergeGuestThreads]);
 
   useEffect(() => {
     if (process.env.NODE_ENV !== "development") return;
-    const sourceLabel = entitlementsSource === "api" ? "server response" : "init";
+    const sourceLabel =
+      entitlementsSource === "api" ? "server response" : "init";
     const remainingSource = entitlements.remainingSource ?? "unknown";
     console.debug(
       "[entitlements]",
@@ -1417,13 +1443,16 @@ const ChatThreadContent = ({
     threadId: Id<"chatThreads">;
     guestChatId?: string;
     messages: Array<{
-      role: "user" | "assistant" | "system";
+      role: ChatMessageRole;
       contentText: string;
       createdAt?: number;
-      attachments?: unknown[];
+      attachments?: ChatAttachment[];
     }>;
   }) => Promise<null>;
-  renameThread: (args: { threadId: Id<"chatThreads">; title: string }) => Promise<null>;
+  renameThread: (args: {
+    threadId: Id<"chatThreads">;
+    title: string;
+  }) => Promise<null>;
   deleteThread: (args: { threadId: Id<"chatThreads"> }) => Promise<null>;
   selectedFile: File | null;
   setSelectedFile: (file: File | null) => void;
@@ -1473,9 +1502,11 @@ const ChatThreadContent = ({
     const last = messages[messages.length - 1];
     return last?.role ?? null;
   });
-  const threadMessagesState = useAssistantState((state) => state.thread.messages);
+  const threadMessagesState = useAssistantState(
+    (state) => state.thread.messages,
+  );
   const isThreadEmpty = useAssistantState(
-    (state) => state.thread.messages.length === 0
+    (state) => state.thread.messages.length === 0,
   );
 
   const updateIsAtBottom = useCallback(() => {
@@ -1506,7 +1537,12 @@ const ChatThreadContent = ({
     scrollRafRef.current = requestAnimationFrame(() => {
       scrollToBottom("smooth");
     });
-  }, [inlineThread, lastAssistantText, threadMessagesState.length, scrollToBottom]);
+  }, [
+    inlineThread,
+    lastAssistantText,
+    threadMessagesState.length,
+    scrollToBottom,
+  ]);
 
   useEffect(() => {
     activeThreadIdRef.current = activeThreadId;
@@ -1547,48 +1583,49 @@ const ChatThreadContent = ({
     audioRef.current = audio;
     ttsPendingAudioRef.current.delete(ttsNextPlayRef.current);
     ttsNextPlayRef.current += 1;
-    audio
-      .play()
-      .catch(() => {
-        ttsSpeakingRef.current = false;
-        playNextAudioInner();
-      });
+    audio.play().catch(() => {
+      ttsSpeakingRef.current = false;
+      playNextAudioInner();
+    });
   }, []);
 
-  const enqueueTts = useCallback((text: string) => {
-    const sequence = ttsSequenceRef.current;
-    ttsSequenceRef.current += 1;
-    const controller = new AbortController();
-    ttsAbortControllersRef.current.push(controller);
-    const voice = voiceGender === "male" ? "echo" : "nova";
+  const enqueueTts = useCallback(
+    (text: string) => {
+      const sequence = ttsSequenceRef.current;
+      ttsSequenceRef.current += 1;
+      const controller = new AbortController();
+      ttsAbortControllersRef.current.push(controller);
+      const voice = voiceGender === "male" ? "echo" : "nova";
 
-    fetch("/api/tts", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text, voice }),
-      signal: controller.signal,
-    })
-      .then((response) => {
-        if (!response.ok) {
-          throw new Error("TTS failed");
-        }
-        return response.blob();
+      fetch("/api/tts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text, voice }),
+        signal: controller.signal,
       })
-      .then((blob) => {
-        const url = URL.createObjectURL(blob);
-        const audio = new Audio(url);
-        audio.onended = () => {
-          URL.revokeObjectURL(url);
-          ttsSpeakingRef.current = false;
+        .then((response) => {
+          if (!response.ok) {
+            throw new Error("TTS failed");
+          }
+          return response.blob();
+        })
+        .then((blob) => {
+          const url = URL.createObjectURL(blob);
+          const audio = new Audio(url);
+          audio.onended = () => {
+            URL.revokeObjectURL(url);
+            ttsSpeakingRef.current = false;
+            playNextAudio();
+          };
+          ttsPendingAudioRef.current.set(sequence, audio);
           playNextAudio();
-        };
-        ttsPendingAudioRef.current.set(sequence, audio);
-        playNextAudio();
-      })
-      .catch(() => {
-        // Ignore TTS failures to avoid blocking chat.
-      });
-  }, [playNextAudio, voiceGender]);
+        })
+        .catch(() => {
+          // Ignore TTS failures to avoid blocking chat.
+        });
+    },
+    [playNextAudio, voiceGender],
+  );
 
   useEffect(() => {
     if (!canUseChatHistory || !activeThreadId || !threadMessages) return;
@@ -1605,12 +1642,7 @@ const ChatThreadContent = ({
     api.thread().reset(initialMessages);
     loadedThreadRef.current = activeThreadId;
     lastPersistedCountRef.current = initialMessages.length;
-  }, [
-    api,
-    activeThreadId,
-    canUseChatHistory,
-    threadMessages,
-  ]);
+  }, [api, activeThreadId, canUseChatHistory, threadMessages]);
 
   useEffect(() => {
     if (!activeThreadId) {
@@ -1731,7 +1763,7 @@ const ChatThreadContent = ({
           titleSource.split("\n")[0].slice(0, 48) || "New repair chat";
         threadId = await createThread({
           title,
-          guestChatId: isAuthenticated ? undefined : guestChatId ?? undefined,
+          guestChatId: isAuthenticated ? undefined : (guestChatId ?? undefined),
         });
         setActiveThreadId(threadId);
         loadedThreadRef.current = threadId;
@@ -1746,7 +1778,7 @@ const ChatThreadContent = ({
     };
 
     persist()
-      .catch(() => { })
+      .catch(() => {})
       .finally(() => {
         isPersistingRef.current = false;
       });
@@ -1808,7 +1840,9 @@ const ChatThreadContent = ({
                   setActiveThreadId(null);
                 }
               }}
-              onRenameThread={(threadId, title) => renameThread({ threadId, title })}
+              onRenameThread={(threadId, title) =>
+                renameThread({ threadId, title })
+              }
               onDeleteThread={(threadId) => {
                 deleteThread({ threadId });
                 if (activeThreadId === threadId) {
@@ -1817,7 +1851,9 @@ const ChatThreadContent = ({
                 }
               }}
               isCollapsed={isHistoryCollapsed}
-              onToggleCollapse={() => setIsHistoryCollapsed(!isHistoryCollapsed)}
+              onToggleCollapse={() =>
+                setIsHistoryCollapsed(!isHistoryCollapsed)
+              }
               isDrawerOpen={isHistoryDrawerOpen}
               onToggleDrawer={() =>
                 setIsHistoryDrawerOpen(!isHistoryDrawerOpen)
@@ -1825,9 +1861,7 @@ const ChatThreadContent = ({
             />
           ) : null}
           <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-            {header ? (
-              <div className="shrink-0 pb-8">{header}</div>
-            ) : null}
+            {header ? <div className="shrink-0 pb-8">{header}</div> : null}
             <ThreadPrimitive.Root className="flex min-h-0 w-full flex-1 flex-col bg-transparent">
               <ThreadPrimitive.Empty>
                 <div className="flex w-full flex-col items-center justify-center pt-4">
@@ -1848,12 +1882,14 @@ const ChatThreadContent = ({
               </ThreadPrimitive.Empty>
 
               <div
-                className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain scroll-smooth scroll-pb-28 pb-28 pt-4"
+                className="flex min-h-0 flex-1 scroll-pb-28 flex-col overflow-y-auto overscroll-contain scroll-smooth pt-4 pb-28"
                 ref={scrollRef}
                 onScroll={updateIsAtBottom}
               >
                 <ThreadPrimitive.Viewport className="mx-auto flex w-full max-w-3xl flex-col gap-4 px-4">
-                  <ThreadPrimitive.Messages components={{ Message: ChatMessage }} />
+                  <ThreadPrimitive.Messages
+                    components={{ Message: ChatMessage }}
+                  />
                   <TypingIndicator />
                   <div ref={bottomRef} />
                 </ThreadPrimitive.Viewport>
@@ -1917,7 +1953,7 @@ const ChatHistorySidebar = ({
     if (!threads) return [];
     if (!searchQuery) return threads;
     return threads.filter((thread) =>
-      thread.title.toLowerCase().includes(searchQuery.toLowerCase())
+      thread.title.toLowerCase().includes(searchQuery.toLowerCase()),
     );
   }, [threads, searchQuery]);
 
@@ -1985,10 +2021,11 @@ const ChatHistorySidebar = ({
             filteredThreads.map((thread) => (
               <div
                 key={thread.id}
-                className={`group relative flex items-center rounded-lg px-3 py-2 transition ${activeThreadId === thread.id
-                  ? "bg-[var(--accent)]/10 text-white"
-                  : "text-[var(--muted)] hover:bg-white/5 hover:text-white"
-                  }`}
+                className={`group relative flex items-center rounded-lg px-3 py-2 transition ${
+                  activeThreadId === thread.id
+                    ? "bg-[var(--accent)]/10 text-white"
+                    : "text-[var(--muted)] hover:bg-white/5 hover:text-white"
+                }`}
               >
                 {editingThreadId === thread.id ? (
                   <input
@@ -2082,13 +2119,15 @@ const ChatHistorySidebar = ({
       </button>
 
       <aside
-        className={`hidden h-full flex-col self-stretch border-r border-white/10 bg-[var(--bg-elev)]/60 p-3 lg:flex ${isCollapsed ? "w-14" : "w-64"
-          }`}
+        className={`hidden h-full flex-col self-stretch border-r border-white/10 bg-[var(--bg-elev)]/60 p-3 lg:flex ${
+          isCollapsed ? "w-14" : "w-64"
+        }`}
       >
         <div className="mb-4 flex items-center justify-between">
           <span
-            className={`text-xs font-semibold text-white ${isCollapsed ? "hidden" : "block"
-              }`}
+            className={`text-xs font-semibold text-white ${
+              isCollapsed ? "hidden" : "block"
+            }`}
           >
             History
           </span>
@@ -2116,13 +2155,15 @@ const ChatHistorySidebar = ({
       </aside>
 
       <div
-        className={`fixed inset-0 z-40 bg-black/40 backdrop-blur-sm transition lg:hidden ${isDrawerOpen ? "opacity-100" : "pointer-events-none opacity-0"
-          }`}
+        className={`fixed inset-0 z-40 bg-black/40 backdrop-blur-sm transition lg:hidden ${
+          isDrawerOpen ? "opacity-100" : "pointer-events-none opacity-0"
+        }`}
         onClick={onToggleDrawer}
       />
       <aside
-        className={`fixed inset-y-0 left-0 z-50 w-64 transform border-r border-white/10 bg-[var(--bg)]/95 p-4 transition lg:hidden ${isDrawerOpen ? "translate-x-0" : "-translate-x-full"
-          }`}
+        className={`fixed inset-y-0 left-0 z-50 w-64 transform border-r border-white/10 bg-[var(--bg)]/95 p-4 transition lg:hidden ${
+          isDrawerOpen ? "translate-x-0" : "-translate-x-full"
+        }`}
       >
         <div className="flex items-center justify-between">
           <span className="text-xs font-semibold text-white">History</span>
@@ -2152,7 +2193,7 @@ const ChatShell = ({
 }) => {
   const api = useAssistantApi();
   const hasMessages = useAssistantState(
-    (state) => state.thread.messages.length > 0
+    (state) => state.thread.messages.length > 0,
   );
 
   return (
@@ -2171,7 +2212,7 @@ const ChatShell = ({
             onClose();
           }}
           aria-label="Close chat"
-          className="absolute right-6 top-6 inline-flex h-10 w-10 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--bg-elev)] text-[var(--muted)] transition hover:text-white"
+          className="absolute top-6 right-6 inline-flex h-10 w-10 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--bg-elev)] text-[var(--muted)] transition hover:text-white"
         >
           <CloseIcon />
         </button>
@@ -2185,7 +2226,7 @@ const EntitlementsDebug = () => {
   const { entitlements, entitlementsSource, messageActions } =
     useEntitlements();
   return (
-    <div className="fixed bottom-4 right-4 z-[70] rounded-xl border border-white/10 bg-black/70 px-4 py-3 text-xs text-white/80">
+    <div className="fixed right-4 bottom-4 z-[70] rounded-xl border border-white/10 bg-black/70 px-4 py-3 text-xs text-white/80">
       <div className="font-semibold text-white">Entitlements</div>
       <div>source: {entitlementsSource}</div>
       <div>plan: {entitlements.userPlan}</div>
@@ -2203,7 +2244,7 @@ const EntitlementsDebug = () => {
 
 const ChatLogic = ({ onChatStart }: { onChatStart?: () => void }) => {
   const hasMessages = useAssistantState(
-    (state) => state.thread.messages.length > 0
+    (state) => state.thread.messages.length > 0,
   );
 
   useEffect(() => {

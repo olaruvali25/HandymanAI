@@ -119,12 +119,12 @@ export default function Navbar() {
                     <span className="text-xs">▾</span>
                   </button>
                   {typeof credits === "number" ? (
-                    <span className="ml-2 inline-flex items-center rounded-full border border-[var(--accent)]/30 bg-[var(--accent)]/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-[var(--accent)]">
+                    <span className="ml-2 inline-flex items-center rounded-full border border-[var(--accent)]/30 bg-[var(--accent)]/10 px-2.5 py-1 text-[10px] font-semibold tracking-[0.2em] text-[var(--accent)] uppercase">
                       {credits} credits
                     </span>
                   ) : null}
                   {isMenuOpen ? (
-                    <div className="absolute right-0 top-full z-50 w-64 pt-2 origin-top-right focus:outline-none">
+                    <div className="absolute top-full right-0 z-50 w-64 origin-top-right pt-2 focus:outline-none">
                       <div className="rounded-xl border border-white/10 bg-[var(--bg-elev)] p-1 shadow-xl backdrop-blur-xl">
                         <Link
                           href="/profile"

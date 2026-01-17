@@ -202,10 +202,10 @@ export default function ReviewsPage() {
         <Container>
           <div className="relative z-10 grid gap-16 lg:grid-cols-[1.1fr_0.9fr]">
             <div className="flex flex-col justify-center">
-              <div className="inline-flex self-start items-center gap-2 rounded-full border border-[var(--accent)]/30 bg-[var(--accent)]/10 px-4 py-1.5 text-xs font-bold uppercase tracking-widest text-[var(--accent)] shadow-[0_0_15px_-5px_var(--accent)]">
+              <div className="inline-flex items-center gap-2 self-start rounded-full border border-[var(--accent)]/30 bg-[var(--accent)]/10 px-4 py-1.5 text-xs font-bold tracking-widest text-[var(--accent)] uppercase shadow-[0_0_15px_-5px_var(--accent)]">
                 Fixly reviews from early users
               </div>
-              <h1 className="mt-8 font-display text-5xl font-bold tracking-tighter text-white sm:text-6xl lg:text-7xl">
+              <h1 className="font-display mt-8 text-5xl font-bold tracking-tighter text-white sm:text-6xl lg:text-7xl">
                 Real stories from people who fixed it themselves.
               </h1>
               <p className="mt-8 max-w-2xl text-lg leading-relaxed text-[var(--muted)] sm:text-xl">
@@ -235,9 +235,9 @@ export default function ReviewsPage() {
             </div>
 
             <div className="relative flex items-center">
-              <div className="absolute -right-12 -top-12 h-64 w-64 rounded-full bg-[var(--accent)]/10 blur-3xl" />
+              <div className="absolute -top-12 -right-12 h-64 w-64 rounded-full bg-[var(--accent)]/10 blur-3xl" />
               <div className="relative w-full rounded-3xl border border-white/10 bg-white/5 p-8 shadow-2xl backdrop-blur-md">
-                <div className="text-xs font-medium uppercase tracking-widest text-[var(--muted)]">
+                <div className="text-xs font-medium tracking-widest text-[var(--muted)] uppercase">
                   Early community rating
                 </div>
                 <div className="mt-6 flex items-end justify-between gap-4">
@@ -270,7 +270,9 @@ export default function ReviewsPage() {
                           style={{ width: `${row.share}%` }}
                         />
                       </div>
-                      <span className="w-8 text-right text-white/60">{row.share}%</span>
+                      <span className="w-8 text-right text-white/60">
+                        {row.share}%
+                      </span>
                     </div>
                   ))}
                 </div>
@@ -346,13 +348,13 @@ export default function ReviewsPage() {
               <div className="mt-10 flex flex-wrap justify-center gap-4">
                 <Link
                   href="/"
-                  className="inline-flex items-center justify-center rounded-full bg-[var(--accent)] px-8 py-4 text-sm font-semibold text-black shadow-[0_0_20px_-5px_var(--accent)] transition-all duration-200 hover:bg-[var(--accent)]/90 hover:scale-[1.02] hover:shadow-[0_0_25px_-5px_var(--accent)] active:scale-[0.98]"
+                  className="inline-flex items-center justify-center rounded-full bg-[var(--accent)] px-8 py-4 text-sm font-semibold text-black shadow-[0_0_20px_-5px_var(--accent)] transition-all duration-200 hover:scale-[1.02] hover:bg-[var(--accent)]/90 hover:shadow-[0_0_25px_-5px_var(--accent)] active:scale-[0.98]"
                 >
                   Start a chat
                 </Link>
                 <Link
                   href="/pricing"
-                  className="inline-flex items-center justify-center rounded-full border border-white/10 bg-white/5 px-8 py-4 text-sm font-semibold text-white transition-all duration-200 hover:bg-white/10 hover:scale-[1.02] active:scale-[0.98]"
+                  className="inline-flex items-center justify-center rounded-full border border-white/10 bg-white/5 px-8 py-4 text-sm font-semibold text-white transition-all duration-200 hover:scale-[1.02] hover:bg-white/10 active:scale-[0.98]"
                 >
                   See pricing
                 </Link>

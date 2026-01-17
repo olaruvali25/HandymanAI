@@ -40,9 +40,9 @@ export default async function RootLayout({
       >
         <ConvexAuthNextjsServerProvider storageNamespace="handymanai">
           <ConvexClientProvider>
-            <div className="flex h-screen flex-col overflow-hidden">
+            <div className="flex min-h-dvh flex-col">
               <Navbar />
-              <main className="flex-1 overflow-hidden">{children}</main>
+              <main className="flex-1">{children}</main>
               <Footer />
             </div>
           </ConvexClientProvider>

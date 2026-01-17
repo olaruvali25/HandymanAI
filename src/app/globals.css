@@ -35,8 +35,9 @@ body {
 
 html.chat-page,
 body.chat-page {
-  height: 100%;
-  overflow: hidden;
+  min-height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 body.chat-page footer {

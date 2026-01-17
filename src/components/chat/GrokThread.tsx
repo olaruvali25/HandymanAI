@@ -62,6 +62,7 @@ type Entitlements = {
   userPlan: string;
   remainingReplies: number | null;
   remainingSource?: "memory" | "cookie" | "init" | "unlimited";
+  credits?: number;
   capabilities: {
     voice: boolean;
     photos: boolean;
@@ -91,6 +92,7 @@ const defaultEntitlements: Entitlements = {
   userHasAccount: false,
   userPlan: "none",
   remainingReplies: null,
+  credits: undefined,
   capabilities: { voice: false, photos: false, linksVisuals: false },
   gating: {
     must_prompt_signup_after_this: false,
@@ -159,6 +161,7 @@ const buildPayloadMessages = (messages: readonly ThreadMessage[]) => {
 const createChatAdapter = (options?: {
   onEntitlements?: (entitlements: Entitlements) => void;
   onMessageActions?: (actions: MessageActions | null) => void;
+  anonymousId?: string | null;
 }): ChatModelAdapter => ({
   async *run({ messages, abortSignal }) {
     options?.onMessageActions?.(null);
@@ -184,6 +187,7 @@ const createChatAdapter = (options?: {
           userCountry,
           userLanguage: locale,
           threadContext: "web-chat",
+          anonymousId: options?.anonymousId ?? undefined,
           attachments:
             messages[messages.length - 1]?.role === "user"
               ? (messages[messages.length - 1]?.content as any[])
@@ -1104,17 +1108,14 @@ const Composer = ({
 
 const ComposerContainer = ({
   children,
+  isVisible,
 }: {
   children: React.ReactNode;
+  isVisible: boolean;
 }) => {
-  const isThreadEmpty = useAssistantState(
-    (state) => state.thread.messages.length === 0
-  );
-
-  if (isThreadEmpty) return null;
-
+  if (!isVisible) return null;
   return (
-    <div className="sticky bottom-0 mt-auto bg-gradient-to-t from-[var(--bg)] to-transparent pb-4 pt-2">
+    <div className="sticky bottom-0 mt-auto shrink-0 bg-gradient-to-t from-[var(--bg)] to-transparent pb-4 pt-2">
       {children}
     </div>
   );
@@ -1152,16 +1153,19 @@ export default function GrokThread({
   );
   const [isHistoryCollapsed, setIsHistoryCollapsed] = useState(false);
   const [isHistoryDrawerOpen, setIsHistoryDrawerOpen] = useState(false);
-  const canUseChatHistory = isAuthenticated;
+  const canUseChatHistory = isAuthenticated || Boolean(guestChatId);
   const shouldPersistHistory = isAuthenticated || Boolean(guestChatId);
   const threads = useQuery(
     api.chatHistory.listThreadsForUser,
     isAuthenticated && canUseChatHistory && showHistorySidebar ? {} : "skip",
   ) as HistoryThread[] | undefined;
   const threadMessages = useQuery(
-    api.chatHistory.getThreadMessages,
-    isAuthenticated && canUseChatHistory && activeThreadId
-      ? { threadId: activeThreadId as Id<"chatThreads"> }
+    api.chatHistory.getThreadMessagesForActor,
+    activeThreadId && canUseChatHistory
+      ? {
+        threadId: activeThreadId as Id<"chatThreads">,
+        anonymousId: isAuthenticated ? undefined : guestChatId ?? undefined,
+      }
       : "skip",
   ) as HistoryMessage[] | undefined;
   const createThread = useMutation(api.chatHistory.createThread);
@@ -1181,8 +1185,9 @@ export default function GrokThread({
       createChatAdapter({
         onEntitlements: (next) => setEntitlementsWithSource(next, "api"),
         onMessageActions: setMessageActions,
+        anonymousId: guestChatId,
       }),
-    [setEntitlementsWithSource],
+    [guestChatId, setEntitlementsWithSource],
   );
   const runtime = useLocalRuntime(chatAdapter);
   const createGuestChatId = useCallback(() => {
@@ -1284,6 +1289,17 @@ export default function GrokThread({
     }
   }, [entitlements, entitlementsSource]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (typeof entitlements.credits !== "number") return;
+    localStorage.setItem("fixly_credits", String(entitlements.credits));
+    window.dispatchEvent(
+      new CustomEvent("fixly-credits-update", {
+        detail: { credits: entitlements.credits },
+      }),
+    );
+  }, [entitlements.credits]);
+
   return (
     <EntitlementsContext.Provider
       value={{
@@ -1302,25 +1318,25 @@ export default function GrokThread({
           guestChatId={guestChatId}
           setGuestChatId={setGuestChatId}
           shouldPersistHistory={shouldPersistHistory}
-        createGuestChatId={createGuestChatId}
-        showHistorySidebar={showHistorySidebar}
-        inlineThread={inlineThread}
-        header={header}
-        threads={threads}
-        threadMessages={threadMessages}
-        activeThreadId={activeThreadId}
-        setActiveThreadId={setActiveThreadId}
-        isHistoryCollapsed={isHistoryCollapsed}
-        setIsHistoryCollapsed={setIsHistoryCollapsed}
-        isHistoryDrawerOpen={isHistoryDrawerOpen}
-        setIsHistoryDrawerOpen={setIsHistoryDrawerOpen}
-        createThread={createThread}
-        appendMessages={appendMessages}
-        renameThread={renameThread}
-        deleteThread={deleteThread}
-        selectedFile={selectedFile}
-        setSelectedFile={setSelectedFile}
-        selectedLanguage={selectedLanguage}
+          createGuestChatId={createGuestChatId}
+          showHistorySidebar={showHistorySidebar}
+          inlineThread={inlineThread}
+          header={header}
+          threads={threads}
+          threadMessages={threadMessages}
+          activeThreadId={activeThreadId}
+          setActiveThreadId={setActiveThreadId}
+          isHistoryCollapsed={isHistoryCollapsed}
+          setIsHistoryCollapsed={setIsHistoryCollapsed}
+          isHistoryDrawerOpen={isHistoryDrawerOpen}
+          setIsHistoryDrawerOpen={setIsHistoryDrawerOpen}
+          createThread={createThread}
+          appendMessages={appendMessages}
+          renameThread={renameThread}
+          deleteThread={deleteThread}
+          selectedFile={selectedFile}
+          setSelectedFile={setSelectedFile}
+          selectedLanguage={selectedLanguage}
           setSelectedLanguage={setSelectedLanguage}
           speechEnabled={speechEnabled}
           setSpeechEnabled={setSpeechEnabled}
@@ -1448,6 +1464,9 @@ const ChatThreadContent = ({
     return last?.role ?? null;
   });
   const threadMessagesState = useAssistantState((state) => state.thread.messages);
+  const isThreadEmpty = useAssistantState(
+    (state) => state.thread.messages.length === 0
+  );
 
   const updateIsAtBottom = useCallback(() => {
     const element = scrollRef.current;
@@ -1793,13 +1812,13 @@ const ChatThreadContent = ({
               }
             />
           ) : null}
-          <div className="flex min-w-0 flex-1 flex-col">
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col">
             {header ? (
               <div className="shrink-0 pb-8">{header}</div>
             ) : null}
-            <ThreadPrimitive.Root className="flex h-full w-full min-h-0 flex-col bg-transparent">
+            <ThreadPrimitive.Root className="flex min-h-0 w-full flex-1 flex-col bg-transparent">
               <ThreadPrimitive.Empty>
-                <div className="flex w-full flex-col items-center justify-center">
+                <div className="flex w-full flex-col items-center justify-center pt-4">
                   <Composer
                     selectedFile={selectedFile}
                     setSelectedFile={setSelectedFile}
@@ -1829,7 +1848,7 @@ const ChatThreadContent = ({
                 </ThreadPrimitive.Viewport>
               </div>
 
-              <ComposerContainer>
+              <ComposerContainer isVisible={!isThreadEmpty}>
                 <Composer
                   selectedFile={selectedFile}
                   setSelectedFile={setSelectedFile}
@@ -1916,7 +1935,7 @@ const ChatHistorySidebar = ({
     if (!isAuthenticated || !canUseChatHistory) {
       return (
         <div className="mt-4 rounded-xl border border-white/10 bg-white/5 px-4 py-4 text-xs text-[var(--muted)]">
-          Chat history is available on Medium, Big, and Pro plans.
+          Log-in or create an account to see your chat history.
           <Link
             href={isAuthenticated ? "/pricing" : "/login"}
             className="mt-3 inline-flex w-full items-center justify-center rounded-full bg-[var(--accent)] px-3 py-2 text-xs font-semibold text-black transition hover:bg-[var(--accent-soft)]"
@@ -2131,7 +2150,7 @@ const ChatShell = ({
       className={
         hasMessages && !inlineThread
           ? "fixed inset-0 z-50 flex min-h-screen flex-col bg-[var(--bg)] px-6 py-6"
-          : "relative flex h-full min-h-0 w-full flex-col overflow-hidden"
+          : "relative flex min-h-dvh w-full flex-col overflow-hidden"
       }
     >
       {hasMessages && !inlineThread && (

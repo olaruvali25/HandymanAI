@@ -1,196 +1,118 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import Container from "@/components/Container";
+import CreditsStatus from "@/app/pricing/CreditsStatus";
+import TopUpCredits from "@/app/pricing/TopUpCredits";
 
-const tiers = [
+const plans = [
   {
-    name: "Small Fix",
-    price: "$10",
-    cadence: "one-time",
-    summary: "For quick, focused repairs you can finish today.",
+    name: "Starter",
+    price: "$12",
+    cadence: "/month",
+    creditsPerMonth: 300,
+    summary: "A solid base for occasional fixes.",
     features: [
-      "Step-by-step text chat guidance",
-      "Basic next-step prompts",
-      "Up to 12 photos for this fix",
-      "Single fix scope (one problem)",
-      "No voice mode",
+      "Credits refresh monthly",
+      "Use credits for text + photos",
+      "No message caps, just credits",
     ],
-    cta: "Start Small Fix",
-    href: "/?plan=small",
+    cta: "Get Starter",
+    href: "/pricing?plan=starter",
   },
   {
-    name: "Medium Fix",
-    price: "$20",
-    cadence: "one-time",
-    summary: "Great for a couple of related issues in one session.",
+    name: "Plus",
+    price: "$24",
+    cadence: "/month",
+    creditsPerMonth: 800,
+    summary: "Great for photo-heavy repairs.",
     features: [
-      "Everything in Small Fix",
-      "Photo guidance enabled",
-      "Voice input + AI voice replies",
-      "Smarter follow-ups after each step",
-      "Up to 2-3 related issues per session",
+      "Credits refresh monthly",
+      "Use credits for text + photos",
+      "No message caps, just credits",
     ],
     badge: "Most popular",
-    cta: "Choose Medium Fix",
-    href: "/?plan=medium",
-  },
-  {
-    name: "Big Fix",
-    price: "$25",
-    cadence: "one-time",
-    summary: "Best for bigger projects with more back-and-forth.",
-    features: [
-      "Photo + voice fully enabled",
-      "Longer guidance window (7 days)",
-      "Iterative troubleshooting support",
-      "More context memory per fix",
-      "Expanded steps for complex DIY",
-    ],
-    cta: "Choose Big Fix",
-    href: "/?plan=big",
+    cta: "Get Plus",
+    href: "/pricing?plan=plus",
   },
   {
     name: "Pro",
-    price: "$25",
+    price: "$40",
     cadence: "/month",
-    summary: "For homeowners and renters who fix things regularly.",
+    creditsPerMonth: 1600,
+    summary: "Built for ongoing home projects.",
     features: [
-      "Everything Fixly has (unlimited)",
-      "Unlimited chats + saved history",
-      "Favorites and quick re-use",
-      "Photo + voice always on",
-      "Premium visuals when useful",
-      "Cancel anytime",
+      "Credits refresh monthly",
+      "Use credits for text + photos",
+      "No message caps, just credits",
     ],
-    badge: "All access",
-    cta: "Go Pro",
+    cta: "Get Pro",
     href: "/pricing?plan=pro",
   },
 ];
 
-const comparisonRows = [
+const creditCosts = [
+  { label: "Text message you send", value: "1 credit" },
   {
-    label: "Voice guidance",
-    values: ["—", "Yes", "Yes", "Yes"],
+    label: "Message with photo attachments",
+    value: "16 credits (1 + 15)",
   },
+  { label: "Text reply from Fixly", value: "2 credits" },
   {
-    label: "Photo guidance",
-    values: ["Limited", "Yes", "Unlimited", "Unlimited"],
-  },
-  {
-    label: "Chat history",
-    values: ["—", "Yes", "Yes", "Yes"],
-  },
-  {
-    label: "Favorites",
-    values: ["—", "—", "Yes", "Yes"],
-  },
-  {
-    label: "Premium visuals",
-    values: ["—", "—", "Limited", "Yes"],
-  },
-];
-
-const faqs = [
-  {
-    question: "What counts as a fix?",
-    answer:
-      "A fix is one clear problem you are working through, like a leak, a door adjustment, or a mounting job.",
-  },
-  {
-    question: "Can Fixly help with dangerous issues?",
-    answer:
-      "Fixly can warn you about unsafe work. For gas, serious electrical, or structural issues, it will tell you to stop and call a licensed pro.",
-  },
-  {
-    question: "Do I need Pro?",
-    answer:
-      "Not necessarily. If you only need help occasionally, a one-time fix is enough.",
-  },
-  {
-    question: "Can I switch plans later?",
-    answer: "Yes. You can start with a one-time fix and move to Pro anytime.",
-  },
-  {
-    question: "Do you store my chats?",
-    answer:
-      "Pro includes saved history. One-time fixes keep the thread for that repair only.",
-  },
-  {
-    question: "Refunds?",
-    answer:
-      "If something feels off, contact support and we will help you sort it out.",
+    label: "Reply that generates an image",
+    value: "7 credits (2 + 5)",
   },
 ];
 
 export const metadata: Metadata = {
-  title: "Fixly Pricing | AI Handyman & DIY Repair Assistant Plans",
+  title: "Fixly Pricing | Monthly credits for home repairs",
   description:
-    "Simple pricing for Fixly, the AI handyman and DIY repair assistant. Get step-by-step help to fix leaks, fix doors, and save money vs handyman with voice + photo guidance.",
+    "Choose a monthly plan or top up credits. Credits power Fixlys step-by-step help for repairs, photos, and guidance.",
   openGraph: {
-    title: "Fixly Pricing | AI Handyman & DIY Repair Assistant Plans",
+    title: "Fixly Pricing | Monthly credits for home repairs",
     description:
-      "Choose a Fixly plan for DIY repair help. Fix leaks, fix doors, and save money vs handyman with voice + photo guidance.",
+      "Choose a monthly plan or top up credits. Credits power Fixlys step-by-step help for repairs, photos, and guidance.",
+    siteName: "Fixly",
     type: "website",
   },
-  keywords: [
-    "AI handyman",
-    "DIY repair assistant",
-    "fix leaks",
-    "fix doors",
-    "save money vs handyman",
-    "voice + photo guidance",
-  ],
+  twitter: {
+    card: "summary_large_image",
+  },
 };
 
 export default function PricingPage() {
   return (
-    <div className="bg-[var(--bg)]">
-      <section className="relative overflow-hidden py-16 lg:py-24">
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,122,26,0.12),transparent_55%)]" />
-        <div className="pointer-events-none absolute inset-0 opacity-40 [background-image:radial-gradient(circle,rgba(255,255,255,0.08)_1px,transparent_1px)] [background-size:22px_22px]" />
+    <div className="min-h-dvh bg-[var(--bg)]">
+      <section className="relative overflow-hidden py-24 lg:py-32">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-[rgba(255,122,26,0.15)] via-transparent to-transparent opacity-70" />
         <Container>
-          <div className="relative z-10 grid gap-10 lg:grid-cols-[1.1fr_0.9fr]">
-            <div>
-              <div className="inline-flex items-center gap-2 rounded-full border border-[var(--accent)]/30 bg-[var(--accent)]/10 px-3 py-1 text-xs font-medium text-[var(--accent)]">
-                Flexible pricing for real DIY moments
-              </div>
-              <h1 className="mt-5 font-display text-4xl font-semibold tracking-tight text-white sm:text-5xl">
-                Fix it yourself without guessing.
+          <div className="relative z-10 grid gap-12 lg:grid-cols-[1.1fr_0.9fr]">
+            <div className="flex flex-col justify-center">
+              <h1 className="font-display text-5xl font-bold tracking-tighter text-white sm:text-6xl lg:text-7xl">
+                Pricing
               </h1>
-              <p className="mt-4 max-w-2xl text-base text-[var(--muted)] sm:text-lg">
-                Get photo and voice guidance, clear step-by-step help, and
-                honest prompts to call a pro when it matters.
+              <p className="mt-6 max-w-2xl text-lg leading-relaxed text-[var(--muted)] sm:text-xl">
+                Pick a monthly credit plan, or top up anytime.
               </p>
-              <p className="mt-4 text-sm text-[var(--muted)]">
-                No long contracts. Cancel anytime. <span className="text-white/60">(Pro only)</span>
-              </p>
-              <p className="mt-2 text-xs uppercase tracking-[0.2em] text-[var(--muted)]">
-
-              </p>
+              <CreditsStatus />
             </div>
-
-            <div className="relative">
-              <div className="absolute -right-6 -top-6 h-40 w-40 rounded-full bg-[var(--accent)]/10 blur-2xl" />
-              <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-elev)]/70 p-6 shadow-[var(--shadow-soft)] backdrop-blur-xl">
-                <div className="text-xs uppercase tracking-[0.2em] text-[var(--muted)]">
-                  Why people choose Fixly
-                </div>
-                <div className="mt-4 grid gap-3">
-                  {[
-                    "Clear steps instead of guesswork",
-                    "Photo guidance for the tricky parts",
-                    "Voice-friendly when your hands are busy",
-                    "Know when to pause and call a pro",
-                  ].map((item) => (
-                    <div
-                      key={item}
-                      className="rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white/80"
-                    >
-                      {item}
-                    </div>
-                  ))}
-                </div>
+            <div className="rounded-3xl border border-white/10 bg-white/5 p-8 shadow-2xl backdrop-blur-sm">
+              <div className="text-xs font-medium uppercase tracking-widest text-[var(--muted)]">
+                Why credits
+              </div>
+              <div className="mt-6 grid gap-4">
+                {[
+                  "Use credits for text and photos",
+                  "Flexible for quick fixes or deep dives",
+                  "Balance updates as you chat",
+                ].map((item) => (
+                  <div
+                    key={item}
+                    className="flex items-center rounded-xl border border-white/5 bg-black/20 px-5 py-4 text-sm text-white/90 transition-colors hover:bg-black/30"
+                  >
+                    <span className="mr-3 h-1.5 w-1.5 rounded-full bg-[var(--accent)]" />
+                    {item}
+                  </div>
+                ))}
               </div>
             </div>
           </div>
@@ -199,91 +121,107 @@ export default function PricingPage() {
 
       <div className="mx-auto h-1 w-24 rounded-full bg-[var(--accent)]" />
 
-      <section className="py-16">
+      <section className="py-24">
         <Container>
-          <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
-            {tiers.map((tier) => (
+          <div className="grid gap-8 lg:grid-cols-4">
+            {plans.map((plan) => (
               <div
-                key={tier.name}
-                className="group relative flex h-full flex-col rounded-2xl border border-[var(--border)] bg-[linear-gradient(160deg,rgba(255,255,255,0.06),rgba(255,255,255,0.02))] p-6 shadow-[var(--shadow-soft)] transition hover:-translate-y-1 hover:border-white/20"
+                key={plan.name}
+                className={`group relative flex h-full flex-col rounded-3xl border p-8 shadow-2xl backdrop-blur-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-black/50 ${plan.badge
+                  ? "border-[var(--accent)]/30 bg-[var(--accent)]/[0.03] hover:border-[var(--accent)]/50 hover:bg-[var(--accent)]/[0.05]"
+                  : "border-white/10 bg-white/5 hover:border-white/20 hover:bg-white/[0.07]"
+                  }`}
               >
-                {tier.badge ? (
-                  <div className="absolute right-4 top-4 rounded-full border border-[var(--accent)]/40 bg-[var(--accent)]/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-[var(--accent)]">
-                    {tier.badge}
+                {plan.badge ? (
+                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-[var(--accent)] px-4 py-1 text-[10px] font-bold uppercase tracking-widest text-black shadow-lg shadow-[var(--accent)]/20">
+                    {plan.badge}
                   </div>
                 ) : null}
-                <div className="text-sm font-semibold text-white">
-                  {tier.name}
+                <div className="text-lg font-semibold text-white">
+                  {plan.name}
                 </div>
-                <div className="mt-3 flex items-baseline gap-2">
-                  <div className="text-3xl font-semibold text-white">
-                    {tier.price}
+                <div className="mt-4 flex items-baseline gap-1">
+                  <div className="text-4xl font-bold tracking-tight text-white">
+                    {plan.price}
                   </div>
-                  <div className="text-xs uppercase tracking-[0.2em] text-[var(--muted)]">
-                    {tier.cadence}
+                  <div className="text-xs font-medium uppercase tracking-widest text-[var(--muted)]">
+                    {plan.cadence}
                   </div>
                 </div>
-                <p className="mt-3 text-sm text-[var(--muted)]">
-                  {tier.summary}
+                <div className="mt-6 rounded-xl border border-white/5 bg-black/20 px-4 py-4 text-center">
+                  <div className="text-xs font-medium uppercase tracking-widest text-[var(--muted)]">
+                    Credits per month
+                  </div>
+                  <div className="mt-1 text-3xl font-bold text-white">
+                    {plan.creditsPerMonth}
+                  </div>
+                </div>
+                <p className="mt-6 text-sm leading-relaxed text-[var(--muted)]">
+                  {plan.summary}
                 </p>
-                <ul className="mt-5 space-y-2 text-sm text-white/80">
-                  {tier.features.map((feature) => (
-                    <li key={feature} className="flex items-start gap-2">
-                      <span className="mt-1 h-2 w-2 rounded-full bg-[var(--accent)]" />
+                <ul className="mt-8 space-y-4 text-sm text-white/80">
+                  {plan.features.map((feature) => (
+                    <li key={feature} className="flex items-start gap-3">
+                      <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--accent)]" />
                       <span>{feature}</span>
                     </li>
                   ))}
                 </ul>
-                <div className="mt-6">
+                <div className="mt-auto pt-8">
                   <Link
-                    href={tier.href}
-                    className={`inline-flex w-full items-center justify-center rounded-full px-5 py-3 text-sm font-semibold transition ${tier.badge
-                      ? "bg-[var(--accent)] text-black hover:bg-[var(--accent-soft)]"
-                      : "border border-[var(--border)] text-white hover:border-white/40"
+                    href={plan.href}
+                    className={`inline-flex w-full items-center justify-center rounded-full px-6 py-4 text-sm font-semibold transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] ${plan.badge
+                      ? "bg-[var(--accent)] text-black shadow-[0_0_20px_-5px_var(--accent)] hover:bg-[var(--accent)]/90 hover:shadow-[0_0_25px_-5px_var(--accent)]"
+                      : "border border-white/10 bg-white/5 text-white hover:bg-white/10"
                       }`}
                   >
-                    {tier.cta}
+                    {plan.cta}
                   </Link>
                 </div>
               </div>
             ))}
+
+            <TopUpCredits />
           </div>
         </Container>
       </section>
 
       <div className="mx-auto h-1 w-24 rounded-full bg-[var(--accent)]" />
 
-      <section className="py-16">
+      <section className="py-24">
         <Container>
-          <h2 className="font-display text-3xl font-semibold text-white">
-            Compare plans at a glance
+          <h2 className="font-display text-3xl font-bold tracking-tight text-white">
+            How credits work
           </h2>
-          <p className="mt-3 max-w-2xl text-sm text-[var(--muted)]">
-            A quick view of what changes as your fix gets bigger.
-          </p>
-
-          <div className="mt-8 overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-elev)]/60">
-            <div className="grid grid-cols-[1.3fr_repeat(4,1fr)] gap-0 border-b border-[var(--border)] text-xs uppercase tracking-[0.2em] text-[var(--muted)]">
-              <div className="px-4 py-3">Feature</div>
-              <div className="px-4 py-3">Small</div>
-              <div className="px-4 py-3">Medium</div>
-              <div className="px-4 py-3">Big</div>
-              <div className="px-4 py-3">Pro</div>
+          <div className="mt-8 grid gap-4 text-sm text-white/80 sm:grid-cols-3">
+            <div className="rounded-2xl border border-white/10 bg-white/5 px-6 py-5 backdrop-blur-sm transition-colors hover:bg-white/10">
+              Every message uses credits.
             </div>
-            {comparisonRows.map((row) => (
+            <div className="rounded-2xl border border-white/10 bg-white/5 px-6 py-5 backdrop-blur-sm transition-colors hover:bg-white/10">
+              Adding photos costs more credits.
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-white/5 px-6 py-5 backdrop-blur-sm transition-colors hover:bg-white/10">
+              Your balance updates automatically as you chat.
+            </div>
+          </div>
+        </Container>
+      </section>
+
+      <div className="mx-auto h-1 w-24 rounded-full bg-[var(--accent)]" />
+
+      <section className="py-24">
+        <Container>
+          <h2 className="font-display text-3xl font-bold tracking-tight text-white">
+            Credit costs
+          </h2>
+          <div className="mt-8 overflow-hidden rounded-3xl border border-white/10 bg-white/5 shadow-2xl backdrop-blur-sm">
+            {creditCosts.map((row) => (
               <div
                 key={row.label}
-                className="grid grid-cols-[1.3fr_repeat(4,1fr)] gap-0 border-b border-[var(--border)] text-sm text-white/80 last:border-b-0"
+                className="flex items-center justify-between gap-4 border-b border-white/5 px-8 py-6 text-sm text-white/80 transition-colors hover:bg-white/5 last:border-b-0"
               >
-                <div className="px-4 py-3 text-white">{row.label}</div>
-                {row.values.map((value, index) => (
-                  <div
-                    key={`${row.label}-${index}`}
-                    className="px-4 py-3 text-[var(--muted)]"
-                  >
-                    {value}
-                  </div>
-                ))}
+                <span className="font-medium text-white">{row.label}</span>
+                <span className="text-[var(--muted)]">{row.value}</span>
               </div>
             ))}
           </div>
@@ -292,85 +230,52 @@ export default function PricingPage() {
 
       <div className="mx-auto h-1 w-24 rounded-full bg-[var(--accent)]" />
 
-      <section className="py-16 lg:py-24">
+      <section className="py-24">
         <Container>
-          <div className="grid gap-8 lg:grid-cols-[1.1fr_0.9fr]">
-            <div>
-              <h2 className="font-display text-3xl font-semibold text-white">
-                Still not sure?
-              </h2>
-              <p className="mt-3 text-sm text-[var(--muted)]">
-                Short answers to the questions we hear most often.
-              </p>
-              <div className="mt-6 grid gap-4">
-                {faqs.map((faq) => (
-                  <div
-                    key={faq.question}
-                    className="rounded-xl border border-[var(--border)] bg-[var(--bg-elev)]/60 px-5 py-4 text-sm text-white/80"
-                  >
-                    <div className="text-sm font-semibold text-white">
-                      {faq.question}
-                    </div>
-                    <div className="mt-2 text-[var(--muted)]">
-                      {faq.answer}
-                    </div>
-                  </div>
-                ))}
+          <h2 className="font-display text-3xl font-bold tracking-tight text-white">
+            Examples
+          </h2>
+          <div className="mt-8 grid gap-6 md:grid-cols-3">
+            {[
+              "Text-only turn: 3 credits (1 + 2)",
+              "You send photos + text reply: 18 credits (16 + 2)",
+              "Text + image reply: 8 credits (1 + 7)",
+            ].map((example) => (
+              <div
+                key={example}
+                className="rounded-3xl border border-white/10 bg-white/5 p-8 text-sm leading-relaxed text-white/80 shadow-xl backdrop-blur-sm transition-all duration-300 hover:-translate-y-1 hover:bg-white/10"
+              >
+                {example}
               </div>
-            </div>
-            <div className="rounded-[var(--radius-lg)] border border-[var(--border)] bg-[radial-gradient(circle_at_top,rgba(255,122,26,0.12),transparent_60%)] p-8 text-center shadow-[var(--shadow-soft)]">
-              <h3 className="font-display text-2xl font-semibold text-white">
-                Ready to start your fix?
-              </h3>
-              <p className="mt-3 text-sm text-[var(--muted)]">
-                Pick a plan, start a chat, and move through the repair with
-                confidence.
-              </p>
-              <div className="mt-5 flex flex-wrap justify-center gap-3">
-                <Link
-                  href="/?plan=small"
-                  className="inline-flex items-center justify-center rounded-full bg-[var(--accent)] px-6 py-3 text-sm font-semibold text-black transition hover:bg-[var(--accent-soft)]"
-                >
-                  Start a chat
-                </Link>
-                <Link
-                  href="/reviews"
-                  className="inline-flex items-center justify-center rounded-full border border-[var(--border)] px-6 py-3 text-sm font-semibold text-white transition hover:border-white/40"
-                >
-                  Read reviews
-                </Link>
-              </div>
-            </div>
+            ))}
           </div>
         </Container>
       </section>
 
-      <section className="pb-16 lg:pb-24">
+
+
+      <section className="pb-24">
         <Container>
-          <div className="relative overflow-hidden rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--bg-elev)]/70 p-8 shadow-[var(--shadow-soft)]">
-            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,122,26,0.18),transparent_60%)]" />
-            <div className="pointer-events-none absolute inset-0 opacity-30 [background-image:radial-gradient(circle,rgba(255,255,255,0.08)_1px,transparent_1px)] [background-size:22px_22px]" />
-            <div className="relative z-10 flex flex-col items-center justify-between gap-4 text-center md:flex-row md:text-left">
+          <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-white/5 px-8 py-12 text-center shadow-2xl backdrop-blur-sm md:px-12 md:text-left">
+            <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-[var(--accent)]/10 to-transparent opacity-50" />
+            <div className="relative z-10 flex flex-col items-center justify-between gap-8 md:flex-row">
               <div>
-                <h3 className="font-display text-2xl font-semibold text-white">
-                  Start with a Small Fix.
+                <h3 className="font-display text-3xl font-bold tracking-tight text-white">
+                  Ready to fix something?
                 </h3>
-                <p className="mt-2 text-sm text-[var(--muted)]">
-                  A focused plan for quick DIY wins, with room to upgrade later.
-                </p>
               </div>
-              <div className="flex flex-wrap justify-center gap-3">
+              <div className="flex flex-wrap justify-center gap-4">
                 <Link
-                  href="/?plan=small"
-                  className="inline-flex items-center justify-center rounded-full bg-[var(--accent)] px-6 py-3 text-sm font-semibold text-black transition hover:bg-[var(--accent-soft)]"
+                  href="/"
+                  className="inline-flex items-center justify-center rounded-full bg-[var(--accent)] px-8 py-4 text-sm font-semibold text-black shadow-[0_0_20px_-5px_var(--accent)] transition-all duration-200 hover:bg-[var(--accent)]/90 hover:scale-[1.02] hover:shadow-[0_0_25px_-5px_var(--accent)] active:scale-[0.98]"
                 >
-                  Start Small Fix
+                  Start a chat
                 </Link>
                 <Link
-                  href="/pricing?plan=pro"
-                  className="inline-flex items-center justify-center rounded-full border border-[var(--border)] px-6 py-3 text-sm font-semibold text-white transition hover:border-white/40"
+                  href="/pricing?topup=1"
+                  className="inline-flex items-center justify-center rounded-full border border-white/10 bg-white/5 px-8 py-4 text-sm font-semibold text-white transition-all duration-200 hover:bg-white/10 hover:scale-[1.02] active:scale-[0.98]"
                 >
-                  Try Pro
+                  Add credits
                 </Link>
               </div>
             </div>

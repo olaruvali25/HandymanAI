@@ -20,12 +20,12 @@ export default function HomePageClient() {
   }, []);
 
   return (
-    <div className="flex h-full min-h-0 w-full flex-col overflow-hidden">
+    <div className="flex min-h-0 w-full flex-1 flex-col">
       <section
         id="chat"
-        className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[radial-gradient(circle_at_top,rgba(255,122,26,0.15),transparent_50%)]"
+        className="flex min-h-0 flex-1 flex-col bg-[radial-gradient(circle_at_top,rgba(255,122,26,0.15),transparent_50%)]"
       >
-        <div className="flex min-h-0 flex-1 w-full items-stretch overflow-hidden">
+        <div className="flex min-h-0 flex-1 w-full items-stretch">
           <GrokThread
             initialThreadId={threadParam}
             inlineThread

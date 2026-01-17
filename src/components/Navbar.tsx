@@ -17,6 +17,7 @@ export default function Navbar() {
   const { user } = useUser();
   const displayName = user?.name || user?.email || "Account";
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [credits, setCredits] = useState<number | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -38,6 +39,39 @@ export default function Navbar() {
       document.removeEventListener("mousedown", handleClickOutside);
     };
   }, []);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    const handleCreditsUpdate = (event: Event) => {
+      const detail = (event as CustomEvent<{ credits?: number }>).detail;
+      if (typeof detail?.credits === "number") {
+        setCredits(detail.credits);
+      }
+    };
+    const refreshCredits = () => {
+      fetch("/api/ai")
+        .then((res) => res.json())
+        .then((data) => {
+          if (typeof data?.entitlements?.credits === "number") {
+            setCredits(data.entitlements.credits);
+          }
+        })
+        .catch(() => {});
+    };
+    const cached = localStorage.getItem("fixly_credits");
+    if (cached && Number.isFinite(Number(cached))) {
+      setCredits(Number(cached));
+    }
+    refreshCredits();
+    window.addEventListener("focus", refreshCredits);
+    window.addEventListener("fixly-credits-update", handleCreditsUpdate);
+    const interval = window.setInterval(refreshCredits, 60000);
+    return () => {
+      window.removeEventListener("focus", refreshCredits);
+      window.removeEventListener("fixly-credits-update", handleCreditsUpdate);
+      window.clearInterval(interval);
+    };
+  }, [isAuthenticated]);
 
   return (
     <header className="sticky top-0 z-40 border-b border-[var(--border)] bg-[color:var(--bg)]/90 backdrop-blur">
@@ -84,17 +118,26 @@ export default function Navbar() {
                     </span>
                     <span className="text-xs">▾</span>
                   </button>
+                  {typeof credits === "number" ? (
+                    <span className="ml-2 inline-flex items-center rounded-full border border-[var(--accent)]/30 bg-[var(--accent)]/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-[var(--accent)]">
+                      {credits} credits
+                    </span>
+                  ) : null}
                   {isMenuOpen ? (
                     <div className="absolute right-0 top-full z-50 w-64 pt-2 origin-top-right focus:outline-none">
                       <div className="rounded-xl border border-white/10 bg-[var(--bg-elev)] p-1 shadow-xl backdrop-blur-xl">
-                        <div className="px-3 py-2">
+                        <Link
+                          href="/profile"
+                          className="block rounded-lg px-3 py-2 transition hover:bg-white/5"
+                          onClick={() => setIsMenuOpen(false)}
+                        >
                           <p className="truncate text-sm font-bold text-white">
                             {user?.name || "User"}
                           </p>
                           <p className="truncate text-xs text-[var(--muted)]">
                             {user?.email}
                           </p>
-                        </div>
+                        </Link>
                         <div className="my-1 h-px bg-white/10" />
                         <Link
                           href="/tasks"
@@ -109,7 +152,7 @@ export default function Navbar() {
                           className="flex w-full items-center rounded-lg px-3 py-2 text-sm text-[var(--text)] transition hover:bg-white/5"
                           onClick={() => setIsMenuOpen(false)}
                         >
-                          Grab a Fix
+                          Get Credits
                         </Link>
                         <Link
                           href="/help"

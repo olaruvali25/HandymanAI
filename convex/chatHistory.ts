@@ -30,6 +30,42 @@ export const listThreadsForUser = query({
   },
 });
 
+export const listThreadsForActor = query({
+  args: { anonymousId: v.optional(v.string()) },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (userId) {
+      const threads = await ctx.db
+        .query("chatThreads")
+        .withIndex("by_user_updatedAt", (q) => q.eq("userId", userId))
+        .order("desc")
+        .take(30);
+      return threads.map((thread) => ({
+        id: thread._id,
+        title: thread.title,
+        updatedAt: thread.updatedAt,
+        lastPreview: thread.lastPreview,
+      }));
+    }
+    if (!args.anonymousId) {
+      return [];
+    }
+    const threads = await ctx.db
+      .query("chatThreads")
+      .withIndex("by_anonymousId", (q) =>
+        q.eq("anonymousId", args.anonymousId),
+      )
+      .order("desc")
+      .take(30);
+    return threads.map((thread) => ({
+      id: thread._id,
+      title: thread.title,
+      updatedAt: thread.updatedAt,
+      lastPreview: thread.lastPreview,
+    }));
+  },
+});
+
 export const getThreadMessages = query({
   args: { threadId: v.id("chatThreads") },
   handler: async (ctx, args) => {
@@ -56,6 +92,38 @@ export const getThreadMessages = query({
   },
 });
 
+export const getThreadMessagesForActor = query({
+  args: { threadId: v.id("chatThreads"), anonymousId: v.optional(v.string()) },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    const thread = await ctx.db.get(args.threadId);
+    if (!thread) {
+      throw new Error("Not found");
+    }
+    const hasUserAccess = userId && thread.userId === userId;
+    const hasGuestAccess =
+      args.anonymousId &&
+      (thread.anonymousId === args.anonymousId ||
+        thread.guestChatId === args.anonymousId);
+    if (!hasUserAccess && !hasGuestAccess) {
+      throw new Error("Not found");
+    }
+    const messages = await ctx.db
+      .query("chatMessages")
+      .withIndex("by_thread_createdAt", (q) => q.eq("threadId", args.threadId))
+      .order("asc")
+      .collect();
+
+    return messages.map((message) => ({
+      id: message._id,
+      role: message.role,
+      contentText: message.contentText,
+      createdAt: message.createdAt,
+      attachments: message.attachments ?? [],
+    }));
+  },
+});
+
 export const createThread = mutation({
   args: {
     title: v.optional(v.string()),
@@ -68,15 +136,16 @@ export const createThread = mutation({
     if (!userId && !args.guestChatId) {
       throw new Error("Unauthorized");
     }
+    const anonymousId = args.guestChatId ?? undefined;
 
     const threadId = await ctx.db.insert("chatThreads", {
       userId: userId ?? undefined,
-      guestChatId: userId ? undefined : args.guestChatId,
+      anonymousId: userId ? undefined : anonymousId,
+      guestChatId: userId ? undefined : anonymousId,
       title,
       createdAt: now,
       updatedAt: now,
       lastPreview: "",
-      planAtCreation: undefined,
     });
 
     return threadId;
@@ -108,7 +177,9 @@ export const appendMessages = mutation({
     }
     const hasUserAccess = userId && thread.userId === userId;
     const hasGuestAccess =
-      args.guestChatId && thread.guestChatId === args.guestChatId;
+      args.guestChatId &&
+      (thread.anonymousId === args.guestChatId ||
+        thread.guestChatId === args.guestChatId);
     if (!hasUserAccess && !hasGuestAccess) {
       throw new Error("Not found");
     }
@@ -119,6 +190,7 @@ export const appendMessages = mutation({
       await ctx.db.insert("chatMessages", {
         threadId: args.threadId,
         userId: userId ?? undefined,
+        anonymousId: userId ? undefined : args.guestChatId ?? undefined,
         guestChatId: userId ? undefined : args.guestChatId,
         role: message.role,
         contentText: message.contentText,
@@ -143,18 +215,33 @@ export const mergeGuestThreads = mutation({
     const { userId } = await requireAuthenticatedUser(ctx);
     const threads = await ctx.db
       .query("chatThreads")
-      .withIndex("by_guestChatId", (q) => q.eq("guestChatId", args.guestChatId))
+      .withIndex("by_anonymousId", (q) =>
+        q.eq("anonymousId", args.guestChatId),
+      )
       .collect();
+    if (threads.length === 0) {
+      const legacyThreads = await ctx.db
+        .query("chatThreads")
+        .withIndex("by_guestChatId", (q) =>
+          q.eq("guestChatId", args.guestChatId),
+        )
+        .collect();
+      threads.push(...legacyThreads);
+    }
 
     let merged = 0;
     for (const thread of threads) {
       if (thread.userId === userId) {
-        await ctx.db.patch(thread._id, { guestChatId: undefined });
+        await ctx.db.patch(thread._id, {
+          guestChatId: undefined,
+          anonymousId: undefined,
+        });
         continue;
       }
       await ctx.db.patch(thread._id, {
         userId,
         guestChatId: undefined,
+        anonymousId: undefined,
       });
       const messages = await ctx.db
         .query("chatMessages")
@@ -164,9 +251,32 @@ export const mergeGuestThreads = mutation({
         await ctx.db.patch(message._id, {
           userId,
           guestChatId: undefined,
+          anonymousId: undefined,
         });
       }
       merged += 1;
+    }
+
+    const anonymousUser = await ctx.db
+      .query("anonymousUsers")
+      .withIndex("by_anonymousId", (q) =>
+        q.eq("anonymousId", args.guestChatId),
+      )
+      .unique();
+    if (anonymousUser && !anonymousUser.mergedToUserId) {
+      const user = await ctx.db.get(userId);
+      const currentCredits =
+        typeof user?.credits === "number" ? user.credits : 0;
+      const nextCredits = currentCredits + (anonymousUser.credits ?? 0);
+      await ctx.db.patch(userId, {
+        credits: nextCredits,
+        updatedAt: Date.now(),
+      });
+      await ctx.db.patch(anonymousUser._id, {
+        credits: 0,
+        mergedToUserId: userId,
+        updatedAt: Date.now(),
+      });
     }
 
     return { merged };
@@ -206,5 +316,88 @@ export const deleteThread = mutation({
     for (const message of messages) {
       await ctx.db.delete(message._id);
     }
+  },
+});
+
+const assertThreadAccess = async (
+  ctx: any,
+  threadId: string,
+  anonymousId?: string,
+) => {
+  const userId = await getAuthUserId(ctx);
+  const thread = await ctx.db.get(threadId);
+  if (!thread) {
+    throw new Error("Not found");
+  }
+  if (userId && thread.userId === userId) {
+    return { userId, thread };
+  }
+  if (
+    anonymousId &&
+    (thread.anonymousId === anonymousId || thread.guestChatId === anonymousId)
+  ) {
+    return { userId: null, thread };
+  }
+  throw new Error("Not found");
+};
+
+export const appendUserMessage = mutation({
+  args: {
+    threadId: v.id("chatThreads"),
+    anonymousId: v.optional(v.string()),
+    contentText: v.string(),
+    attachments: v.optional(v.array(v.any())),
+  },
+  handler: async (ctx, args) => {
+    const { userId, thread } = await assertThreadAccess(
+      ctx,
+      args.threadId,
+      args.anonymousId,
+    );
+    const now = Date.now();
+    await ctx.db.insert("chatMessages", {
+      threadId: args.threadId,
+      userId: userId ?? undefined,
+      anonymousId: userId ? undefined : args.anonymousId,
+      guestChatId: userId ? undefined : args.anonymousId,
+      role: "user",
+      contentText: args.contentText,
+      attachments: args.attachments ?? [],
+      createdAt: now,
+    });
+    await ctx.db.patch(thread._id, {
+      updatedAt: now,
+      lastPreview: args.contentText.slice(0, 80),
+    });
+  },
+});
+
+export const appendAssistantMessage = mutation({
+  args: {
+    threadId: v.id("chatThreads"),
+    anonymousId: v.optional(v.string()),
+    contentText: v.string(),
+    attachments: v.optional(v.array(v.any())),
+  },
+  handler: async (ctx, args) => {
+    const { userId, thread } = await assertThreadAccess(
+      ctx,
+      args.threadId,
+      args.anonymousId,
+    );
+    const now = Date.now();
+    await ctx.db.insert("chatMessages", {
+      threadId: args.threadId,
+      userId: userId ?? undefined,
+      anonymousId: userId ? undefined : args.anonymousId,
+      guestChatId: userId ? undefined : args.anonymousId,
+      role: "assistant",
+      contentText: args.contentText,
+      attachments: args.attachments ?? [],
+      createdAt: now,
+    });
+    await ctx.db.patch(thread._id, {
+      updatedAt: now,
+    });
   },
 });

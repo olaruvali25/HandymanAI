@@ -12,7 +12,6 @@ type IncomingMessage = {
 type ChatRequestBody = {
   messages: IncomingMessage[];
   locale?: string;
-  plan?: "free" | "paid";
 };
 
 const MAX_MESSAGES = 50;
@@ -213,7 +212,7 @@ export async function POST(req: Request) {
           ...body!.messages.map(
             (message) => `${message.role.toUpperCase()}: ${message.content}`,
           ),
-          `USER_PLAN: ${body!.plan ?? "free"}`,
+          "USER_PLAN: credits",
           `USER_LOCALE: ${body!.locale ?? "unknown"}`,
           "DRAFT_RESPONSE:",
           draft,

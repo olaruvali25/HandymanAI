@@ -6,20 +6,13 @@ import { api } from "@convex/_generated/api";
 import { getOpenAIClient } from "@/lib/openai";
 import { env } from "@/env";
 import {
+  ANON_COOKIE,
+  buildClientEntitlements,
   buildCookieHeader,
-  buildCounterCookieValue,
   getConvexAuthToken,
-  getEntitlements,
-  normalizeStoredPlan,
-  parseCounterCookieValue,
-  PHOTO_COOKIE,
-  SESSION_COOKIE,
-  THREAD_COOKIE,
-  toClientEntitlements,
-  resolveEntitlements,
-  type StoredPlan,
+  parseCookies,
 } from "@/lib/entitlements";
-import { randomUUID } from "crypto";
+import { createHash, randomUUID } from "crypto";
 import type { FunctionReference } from "convex/server";
 
 type IncomingMessage = {
@@ -33,6 +26,8 @@ type AiRequestBody = {
   userLanguage?: string;
   threadContext?: string;
   threadId?: string;
+  anonymousId?: string;
+  guestChatId?: string;
   attachments?: {
     name: string;
     type: string;
@@ -109,14 +104,6 @@ const SCOPE_CACHE = new BoundedMap<
   string,
   { text: string; updatedAt: number }
 >(CACHE_MAX_ENTRIES, CACHE_TTL_MS);
-const BLOCKED_NOTICE = new BoundedMap<
-  string,
-  { limit?: boolean; mismatch?: boolean; photo?: boolean }
->(CACHE_MAX_ENTRIES, CACHE_TTL_MS);
-const PHOTO_STORE = new BoundedMap<string, number>(
-  CACHE_MAX_ENTRIES,
-  CACHE_TTL_MS,
-);
 
 const serializeMessages = (messages: IncomingMessage[]) => {
   return messages
@@ -204,29 +191,6 @@ const filesToAttachments = async (files: File[]) => {
   return attachments;
 };
 
-const getPlanOverride = async (req: Request) => {
-  const token = getConvexAuthToken(req.headers.get("cookie"));
-  if (!token) return null;
-  try {
-    const user = await fetchQuery(api.users.me, {}, { token });
-    const plan =
-      (user as { plan?: StoredPlan | null } | null)?.plan ?? null;
-    return normalizeStoredPlan(plan);
-  } catch {
-    return null;
-  }
-};
-
-const getPhotoScope = (
-  userPlan: string,
-  userHasAccount: boolean,
-): "daily" | "thread" => {
-  if (userPlan === "small_fix" || userPlan === "none" || userPlan === "free") {
-    return "thread";
-  }
-  return userHasAccount ? "daily" : "thread";
-};
-
 const getPrompt = (filename: string) => {
   return readFile(
     path.join(process.cwd(), "src", "ai", "prompts", filename),
@@ -249,139 +213,6 @@ const hasScopeCues = (text: string) => {
   const safetyCues = ["gas", "sparks", "breaker", "flood", "smell"];
 
   return [...scopeCues, ...safetyCues].some((cue) => lower.includes(cue));
-};
-
-const buildGatingResponse = (
-  userPlan: string,
-  reason: "limit" | "plan_mismatch",
-  scope?: "small" | "medium" | "big" | null,
-  isRepeat?: boolean,
-) => {
-  if (reason === "plan_mismatch" && scope) {
-    return {
-      text:
-        "This looks like a bigger fix - upgrade so I can guide you fully.",
-      gating: { blocked: true, reason: "plan_mismatch" },
-      actions: [
-        {
-          type: "link",
-          label: "Upgrade",
-          href: "/pricing",
-          variant: "primary",
-        },
-      ],
-    };
-  }
-
-  if (userPlan === "none") {
-    return {
-      text: isRepeat
-        ? "I cant continue until you create an account."
-        : "Were close  create an account to continue so I can keep guiding you.",
-      gating: { blocked: true, reason: "signup" },
-      actions: [
-        {
-          type: "link",
-          label: "Sign up",
-          href: "/signup",
-          variant: "primary",
-        },
-        {
-          type: "link",
-          label: "Log in",
-          href: "/login",
-          variant: "secondary",
-        },
-      ],
-    };
-  }
-
-  return {
-    text:
-      "Want me to guide you step-by-step (voice + photos)? Grab a Fix and well finish this.",
-    gating: { blocked: true, reason: "payment" },
-    actions: [
-      {
-        type: "link",
-        label: "Get a Fix",
-        href: "/pricing",
-        variant: "primary",
-      },
-    ],
-  };
-};
-
-const buildLimitResponse = (userHasAccount: boolean) => {
-  if (!userHasAccount) {
-    return {
-      text: "Your issue is about to be fixed, but to keep guiding you, log-in or sign-up to continue.",
-      actions: [
-        { type: "link", label: "Log in", href: "/login", variant: "secondary" },
-        { type: "link", label: "Sign up", href: "/signup", variant: "primary" },
-      ],
-      gating: { blocked: true, reason: "limit" },
-    };
-  }
-
-  return {
-    text: "Got it, we'll solve this issue in a few moments, but first let's get you set up with a Fix so we can continue.",
-    actions: [
-      { type: "link", label: "Get a Fix", href: "/pricing", variant: "primary" },
-    ],
-    gating: { blocked: true, reason: "limit" },
-  };
-};
-
-const buildPhotoLimitResponse = (userPlan: string, isRepeat?: boolean) => {
-  const baseText = isRepeat
-    ? "This feature is included in Medium/Big/Pro. Upgrade to continue."
-    : "This feature is included in Medium/Big/Pro. Upgrade to continue.";
-
-  if (userPlan === "none") {
-    return {
-      text: "This feature is included in Medium/Big/Pro. Create an account to continue.",
-      gating: { blocked: true, reason: "photo_limit" },
-      actions: [
-        { type: "link", label: "Sign up", href: "/signup", variant: "primary" },
-        { type: "link", label: "Log in", href: "/login", variant: "secondary" },
-      ],
-    };
-  }
-
-  if (userPlan === "small_fix") {
-    return {
-      text: baseText,
-      gating: { blocked: true, reason: "photo_limit" },
-      actions: [
-        {
-          type: "link",
-          label: "Upgrade",
-          href: "/pricing",
-          variant: "primary",
-        },
-      ],
-    };
-  }
-
-  return {
-    text: baseText,
-    gating: { blocked: true, reason: "photo_limit" },
-    actions: [
-      { type: "link", label: "Upgrade", href: "/pricing", variant: "primary" },
-    ],
-  };
-};
-
-const parseScopeFromText = (scopeText: string) => {
-  if (!scopeText) return null;
-  try {
-    const parsed = JSON.parse(scopeText) as {
-      task?: { scope?: "small" | "medium" | "big" };
-    };
-    return parsed?.task?.scope ?? null;
-  } catch {
-    return null;
-  }
 };
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -414,28 +245,30 @@ const getResponseOutputText = (response: unknown) => {
   return typeof part?.text === "string" ? part.text.trim() : "";
 };
 
-const applyGatingIfNeeded = (
-  entitlements: ReturnType<typeof toClientEntitlements>,
+const getAnonymousId = (
+  req: Request,
+  body: AiRequestBody | null,
 ) => {
-  if (entitlements.remainingReplies === null) return entitlements;
-  if (entitlements.remainingReplies > 0) return entitlements;
+  const cookies = parseCookies(req.headers.get("cookie"));
+  const fromBody = body?.anonymousId ?? body?.guestChatId ?? null;
+  const fromCookie = cookies[ANON_COOKIE] ?? null;
+  return { fromBody, fromCookie };
+};
 
-  if (entitlements.userPlan === "none") {
-    entitlements.gating.must_prompt_signup_after_this = true;
-  }
-
-  if (entitlements.userPlan === "free") {
-    entitlements.gating.must_prompt_payment_after_this = true;
-  }
-
-  entitlements.capabilities = {
-    ...entitlements.capabilities,
-    voice: false,
-    photos: false,
-    linksVisuals: false,
-  };
-
-  return entitlements;
+const buildTurnId = (
+  messages: IncomingMessage[],
+  attachments: ReturnType<typeof sanitizeAttachments>,
+) => {
+  const payload = JSON.stringify({
+    messages,
+    attachments: attachments.map((attachment) => ({
+      name: attachment.name,
+      type: attachment.type,
+      size: attachment.size,
+      digest: attachment.dataUrl.slice(0, 80),
+    })),
+  });
+  return createHash("sha256").update(payload).digest("hex");
 };
 
 const logEvent = (message: string, data?: Record<string, unknown>) => {
@@ -466,101 +299,69 @@ const withTimeout = async <T>(
   }
 };
 
-type MessageCountQuery = FunctionReference<
+type GetCreditsQuery = FunctionReference<
   "query",
   "public",
-  { sessionId?: string },
-  number
+  { anonymousId?: string },
+  { credits: number }
 >;
-type MessageCountMutation = FunctionReference<
+type ReserveCreditsMutation = FunctionReference<
   "mutation",
   "public",
-  { sessionId?: string },
-  number
+  { anonymousId?: string; turnId: string; cost: number; minimumCredits?: number },
+  { credits: number }
+>;
+type ChargeCreditsMutation = FunctionReference<
+  "mutation",
+  "public",
+  { anonymousId?: string; turnId: string; cost: number },
+  { credits: number }
 >;
 
-const entitlementsApi = api as unknown as {
+const creditsApi = api as unknown as {
   entitlements: {
-    getMessageCount: MessageCountQuery;
-    incrementMessageCount: MessageCountMutation;
+    getCreditsForActor: GetCreditsQuery;
+    reserveCredits: ReserveCreditsMutation;
+    chargeAssistantCredits: ChargeCreditsMutation;
   };
-};
-
-const getMessageCount = async (
-  sessionId: string | null,
-  token: string | null,
-) => {
-  return withTimeout(
-    fetchQuery(
-      entitlementsApi.entitlements.getMessageCount,
-      { sessionId: sessionId ?? undefined },
-      token ? { token } : {},
-    ),
-  );
-};
-
-const incrementMessageCount = async (
-  sessionId: string | null,
-  token: string | null,
-) => {
-  return withTimeout(
-    fetchMutation(
-      entitlementsApi.entitlements.incrementMessageCount,
-      { sessionId: sessionId ?? undefined },
-      token ? { token } : {},
-    ),
-  );
 };
 
 export async function GET(req: Request) {
   logEvent("[ai] GET /api/ai start");
-  const planOverride = await getPlanOverride(req);
-  const entitlements = getEntitlements(req, {
-    planOverride: planOverride ?? undefined,
-  });
   const cookieHeader = req.headers.get("cookie");
   const token = getConvexAuthToken(cookieHeader);
-  let sessionId = entitlements.sessionId;
-  let shouldSetSessionCookie = false;
-  if (!entitlements.userHasAccount && !sessionId) {
-    sessionId = randomUUID();
-    shouldSetSessionCookie = true;
+  const userHasAccount = Boolean(token);
+  const { fromCookie } = getAnonymousId(req, null);
+  let anonymousId = userHasAccount ? null : fromCookie;
+  let shouldSetAnonCookie = false;
+  if (!userHasAccount && !anonymousId) {
+    anonymousId = randomUUID();
+    shouldSetAnonCookie = true;
   }
+
+  let credits = 0;
   try {
-    const messageCount = await getMessageCount(sessionId, token);
-    const resolved = resolveEntitlements({
-      isAnonymous: !entitlements.userHasAccount,
-      plan: entitlements.userPlan,
-      messageCount,
-    });
-
-    entitlements.userPlan = resolved.userPlan;
-    entitlements.capabilities = resolved.capabilities;
-    entitlements.remainingReplies = resolved.remainingMessages;
-    entitlements.remainingSource = "server";
-    entitlements.sessionId = sessionId;
+    const creditsResponse = await withTimeout(
+      fetchQuery(
+        creditsApi.entitlements.getCreditsForActor,
+        { anonymousId: anonymousId ?? undefined },
+        token ? { token } : {},
+      ),
+    );
+    credits = creditsResponse?.credits ?? 0;
   } catch (error) {
-    console.error("[ai] entitlements init error:", error);
+    console.error("[ai] credits init error:", error);
   }
 
-  const clientEntitlements = applyGatingIfNeeded(
-    toClientEntitlements(entitlements),
-  );
+  const clientEntitlements = buildClientEntitlements({
+    userHasAccount,
+    credits,
+  });
   const res = NextResponse.json({ entitlements: clientEntitlements });
-  res.headers.set("X-User-Has-Account", entitlements.userHasAccount ? "1" : "0");
-
-  if (!entitlements.cookies[THREAD_COOKIE] && entitlements.threadId) {
-    res.headers.append(
-      "Set-Cookie",
-      buildCookieHeader(THREAD_COOKIE, entitlements.threadId),
-    );
-  }
-
-  if (shouldSetSessionCookie && sessionId) {
-    res.headers.append(
-      "Set-Cookie",
-      buildCookieHeader(SESSION_COOKIE, sessionId),
-    );
+  res.headers.set("X-User-Has-Account", userHasAccount ? "1" : "0");
+  res.headers.set("X-Credits", String(credits));
+  if (shouldSetAnonCookie && anonymousId) {
+    res.headers.append("Set-Cookie", buildCookieHeader(ANON_COOKIE, anonymousId));
   }
 
   return res;
@@ -639,111 +440,15 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: validationError }, { status: 400 });
   }
 
-  const planOverride = await getPlanOverride(req);
-  const entitlements = getEntitlements(req, {
-    planOverride: planOverride ?? undefined,
-  });
   const cookieHeader = req.headers.get("cookie");
   const token = getConvexAuthToken(cookieHeader);
-  let sessionId = entitlements.sessionId;
-  let shouldSetSessionCookie = false;
-  if (!sessionId && !token) {
-    sessionId = randomUUID();
-    shouldSetSessionCookie = true;
-  }
-  let resolved;
-  try {
-    const messageCount = await incrementMessageCount(sessionId, token);
-    resolved = resolveEntitlements({
-      isAnonymous: !entitlements.userHasAccount,
-      plan: entitlements.userPlan,
-      messageCount,
-    });
-    entitlements.userPlan = resolved.userPlan;
-    entitlements.capabilities = resolved.capabilities;
-    entitlements.remainingReplies = resolved.remainingMessages;
-    entitlements.remainingSource = "server";
-    entitlements.sessionId = sessionId;
-  } catch (error) {
-    console.error("[ai] entitlements error:", error);
-    return NextResponse.json(
-      { error: "Unable to reach usage service. Please try again." },
-      { status: 503 },
-    );
-  }
-
-  if (!resolved.canChat) {
-    const gated = applyGatingIfNeeded(toClientEntitlements(entitlements));
-    const limitNoticeKey = `limit:${entitlements.userHasAccount ? "user" : "anon"}:${entitlements.sessionId ?? entitlements.threadId}`;
-    const isRepeat = Boolean(BLOCKED_NOTICE.get(limitNoticeKey)?.limit);
-    const response = isRepeat
-      ? {
-          text: "You're still at the limit. Use the button above to continue.",
-          actions: [] as Array<{
-            type: "link";
-            label: string;
-            href: string;
-            variant?: "primary" | "secondary";
-          }>,
-          gating: { blocked: true, reason: "limit" as const },
-        }
-      : buildLimitResponse(entitlements.userHasAccount);
-    if (!isRepeat) {
-      BLOCKED_NOTICE.set(limitNoticeKey, { limit: true });
-    }
-    const { text, actions, gating } = response;
-    const encoder = new TextEncoder();
-    const headers = new Headers({
-      "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache, no-transform",
-      Connection: "keep-alive",
-    });
-
-    if (!entitlements.cookies[THREAD_COOKIE] && entitlements.threadId) {
-      headers.append(
-        "Set-Cookie",
-        buildCookieHeader(THREAD_COOKIE, entitlements.threadId),
-      );
-    }
-    if (shouldSetSessionCookie && sessionId) {
-      headers.append(
-        "Set-Cookie",
-        buildCookieHeader(SESSION_COOKIE, sessionId),
-      );
-    }
-
-    logEvent("[ai] response limit", { userHasAccount: entitlements.userHasAccount });
-    const stream = new ReadableStream({
-      start(controller) {
-        const sendEvent = (event: string, data: object) => {
-          controller.enqueue(
-            encoder.encode(
-              `event: ${event}\n` + `data: ${JSON.stringify(data)}\n\n`,
-            ),
-          );
-        };
-        sendEvent("meta", { entitlements: gated });
-        if (actions?.length) {
-          sendEvent("actions", { actions, gating });
-        }
-        sendEvent("delta", { text });
-        sendEvent("done", {});
-        controller.close();
-      },
-    });
-
-    if (STREAMING_DISABLED) {
-      const res = NextResponse.json({
-        text,
-        entitlements: gated,
-        actions: actions?.length ? actions : undefined,
-        gating,
-      });
-      headers.forEach((value, key) => res.headers.append(key, value));
-      return res;
-    }
-
-    return new Response(stream, { headers });
+  const userHasAccount = Boolean(token);
+  const { fromBody, fromCookie } = getAnonymousId(req, body);
+  let anonymousId = userHasAccount ? null : fromBody ?? fromCookie;
+  let shouldSetAnonCookie = false;
+  if (!userHasAccount && !anonymousId) {
+    anonymousId = randomUUID();
+    shouldSetAnonCookie = true;
   }
 
   if (!env.OPENAI_API_KEY) {
@@ -753,13 +458,61 @@ export async function POST(req: Request) {
     );
   }
 
-  const clientEntitlements = applyGatingIfNeeded(
-    toClientEntitlements(entitlements),
-  );
   const attachments =
     attachmentsFromForm.length > 0
       ? sanitizeAttachments(attachmentsFromForm)
       : sanitizeAttachments(body.attachments);
+  const hasImageAttachments = attachments.length > 0;
+  const userCost = 1 + (hasImageAttachments ? 15 : 0);
+  const assistantCost = 2 + (hasImageAttachments ? 5 : 0);
+  const turnId = buildTurnId(body.messages, attachments);
+
+  let creditsRemaining = 0;
+  try {
+    const reserve = await withTimeout(
+      fetchMutation(
+        creditsApi.entitlements.reserveCredits,
+        {
+          anonymousId: anonymousId ?? undefined,
+          turnId,
+          cost: userCost,
+          minimumCredits: userCost + assistantCost,
+        },
+        token ? { token } : {},
+      ),
+    );
+    creditsRemaining = reserve?.credits ?? 0;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    if (message === "INSUFFICIENT_CREDITS") {
+      const res = NextResponse.json(
+        { error: "INSUFFICIENT_CREDITS" },
+        { status: 402 },
+      );
+      if (anonymousId && (!fromCookie || shouldSetAnonCookie)) {
+        res.headers.append(
+          "Set-Cookie",
+          buildCookieHeader(ANON_COOKIE, anonymousId),
+        );
+      }
+      return res;
+    }
+    console.error("[ai] credits reserve error:", error);
+    const res = NextResponse.json(
+      { error: "Unable to reserve credits. Please try again." },
+      { status: 503 },
+    );
+    if (anonymousId && (!fromCookie || shouldSetAnonCookie)) {
+      res.headers.append("Set-Cookie", buildCookieHeader(ANON_COOKIE, anonymousId));
+    }
+    return res;
+  }
+
+  const clientEntitlements = buildClientEntitlements({
+    userHasAccount,
+    credits: creditsRemaining,
+  });
+  const threadId = body.threadId ?? null;
   const baseModel = env.OPENAI_MODEL ?? "gpt-5.2";
   const model =
     attachments.length > 0 && !/gpt-4|4o/i.test(baseModel)
@@ -776,182 +529,13 @@ export async function POST(req: Request) {
       hasAttachments: attachments.length > 0,
     });
   }
-  const remainingMode = entitlements.userHasAccount ? "account" : "anon";
-  const photoLimit = entitlements.capabilities.photoLimit;
-  const photoScope =
-    photoLimit === null
-      ? null
-      : getPhotoScope(entitlements.userPlan, entitlements.userHasAccount);
-  const photoKey =
-    photoScope === "daily"
-      ? `photo:${entitlements.remainingKey}`
-      : photoScope === "thread"
-        ? `photo:thread:${entitlements.threadId}`
-        : null;
-  const storedPhoto =
-    photoKey && PHOTO_STORE.has(photoKey) ? PHOTO_STORE.get(photoKey) : undefined;
-  const cookiePhoto =
-    photoKey && photoScope
-      ? parseCounterCookieValue(
-        entitlements.cookies[PHOTO_COOKIE],
-        photoScope,
-        entitlements.threadId,
-        remainingMode,
-      )
-      : Number.NaN;
-  const photoUsed = Number.isFinite(storedPhoto)
-    ? (storedPhoto as number)
-    : Number.isFinite(cookiePhoto)
-      ? (cookiePhoto as number)
-      : 0;
-  let nextPhotoCount: number | null = null;
-
   if (process.env.NODE_ENV === "development") {
-    console.debug("[ai] entitlements", {
-      userHasAccount: entitlements.userHasAccount,
-      plan: entitlements.userPlan,
-      remaining: entitlements.remainingReplies,
-      threadId: entitlements.threadId,
-      photoUsed,
-      photoLimit,
+    console.debug("[ai] credits", {
+      userHasAccount,
+      creditsRemaining,
+      attachments: attachments.length,
     });
   }
-
-  if (attachments.length > 0 && !entitlements.capabilities.photos) {
-    const photoNoticeKey = `photo:blocked:${entitlements.remainingKey}`;
-    const isRepeat = Boolean(BLOCKED_NOTICE.get(photoNoticeKey)?.photo);
-    const { text, actions, gating } = buildPhotoLimitResponse(
-      entitlements.userPlan,
-      isRepeat,
-    );
-    BLOCKED_NOTICE.set(photoNoticeKey, { photo: true });
-    const encoder = new TextEncoder();
-    const headers = new Headers({
-      "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache, no-transform",
-      Connection: "keep-alive",
-    });
-    if (!entitlements.cookies[THREAD_COOKIE] && entitlements.threadId) {
-      headers.append(
-        "Set-Cookie",
-        buildCookieHeader(THREAD_COOKIE, entitlements.threadId),
-      );
-    }
-    if (shouldSetSessionCookie && sessionId) {
-      headers.append(
-        "Set-Cookie",
-        buildCookieHeader(SESSION_COOKIE, sessionId),
-      );
-    }
-    logEvent("[ai] response photo blocked");
-    const stream = new ReadableStream({
-      start(controller) {
-        const sendEvent = (event: string, data: object) => {
-          controller.enqueue(
-            encoder.encode(
-              `event: ${event}\n` + `data: ${JSON.stringify(data)}\n\n`,
-            ),
-          );
-        };
-        sendEvent("meta", { entitlements: clientEntitlements });
-        sendEvent("actions", { actions, gating });
-        sendEvent("delta", { text });
-        sendEvent("done", {});
-        controller.close();
-      },
-    });
-
-    if (STREAMING_DISABLED) {
-      const res = NextResponse.json({
-        text,
-        entitlements: clientEntitlements,
-        actions,
-        gating,
-      });
-      headers.forEach((value, key) => res.headers.append(key, value));
-      return res;
-    }
-
-    return new Response(stream, { headers });
-  }
-
-  if (photoLimit !== null && attachments.length > 0 && photoKey && photoScope) {
-    const nextPhoto = photoUsed + attachments.length;
-    if (nextPhoto > photoLimit) {
-      const photoNoticeKey = `photo:${photoKey}`;
-      const isRepeat = Boolean(BLOCKED_NOTICE.get(photoNoticeKey)?.photo);
-      const { text, actions, gating } = buildPhotoLimitResponse(
-        entitlements.userPlan,
-        isRepeat,
-      );
-      BLOCKED_NOTICE.set(photoNoticeKey, { photo: true });
-      if (process.env.NODE_ENV === "development") {
-        console.debug("[ai] gate:photo_limit", {
-          plan: entitlements.userPlan,
-          threadId: entitlements.threadId,
-          photoUsed,
-          photoLimit,
-        });
-      }
-      const encoder = new TextEncoder();
-      const headers = new Headers({
-        "Content-Type": "text/event-stream",
-        "Cache-Control": "no-cache, no-transform",
-        Connection: "keep-alive",
-      });
-      if (!entitlements.cookies[THREAD_COOKIE] && entitlements.threadId) {
-        headers.append(
-          "Set-Cookie",
-          buildCookieHeader(THREAD_COOKIE, entitlements.threadId),
-        );
-      }
-      if (shouldSetSessionCookie && sessionId) {
-        headers.append(
-          "Set-Cookie",
-          buildCookieHeader(SESSION_COOKIE, sessionId),
-        );
-      }
-      logEvent("[ai] response photo limit");
-      const stream = new ReadableStream({
-        start(controller) {
-          const sendEvent = (event: string, data: object) => {
-            controller.enqueue(
-              encoder.encode(
-                `event: ${event}\n` + `data: ${JSON.stringify(data)}\n\n`,
-              ),
-            );
-          };
-          sendEvent("meta", { entitlements: clientEntitlements });
-          sendEvent("actions", { actions, gating });
-          sendEvent("delta", { text });
-          sendEvent("done", {});
-          controller.close();
-        },
-      });
-
-      if (STREAMING_DISABLED) {
-        const res = NextResponse.json({
-          text,
-          entitlements: clientEntitlements,
-          actions,
-          gating,
-        });
-        headers.forEach((value, key) => res.headers.append(key, value));
-        return res;
-      }
-
-      return new Response(stream, { headers });
-    }
-    nextPhotoCount = nextPhoto;
-    PHOTO_STORE.set(photoKey, nextPhoto);
-  }
-
-  const planLabel = entitlements.userPlan;
-  const remainingLabel =
-    entitlements.remainingReplies === null
-      ? "unlimited"
-      : String(entitlements.remainingReplies);
-  console.log(`Plan: ${planLabel} | Remaining: ${remainingLabel}`);
 
   const [scopePrompt, primaryPrompt] = await Promise.all([
     getPrompt("scope-control.txt"),
@@ -967,47 +551,11 @@ export async function POST(req: Request) {
     Connection: "keep-alive",
   });
 
-  if (entitlements.remainingReplies !== null) {
-    headers.set("X-Remaining", String(entitlements.remainingReplies));
+  headers.set("X-User-Has-Account", userHasAccount ? "1" : "0");
+  headers.set("X-Credits", String(creditsRemaining));
+  if (anonymousId && (!fromCookie || shouldSetAnonCookie)) {
+    headers.append("Set-Cookie", buildCookieHeader(ANON_COOKIE, anonymousId));
   }
-
-  if (!entitlements.cookies[THREAD_COOKIE] && entitlements.threadId) {
-    headers.append(
-      "Set-Cookie",
-      buildCookieHeader(THREAD_COOKIE, entitlements.threadId),
-    );
-  }
-
-  if (shouldSetSessionCookie && sessionId) {
-    headers.append(
-      "Set-Cookie",
-      buildCookieHeader(SESSION_COOKIE, sessionId),
-    );
-  }
-
-  if (nextPhotoCount !== null && photoScope) {
-    headers.append(
-      "Set-Cookie",
-      buildCookieHeader(
-        PHOTO_COOKIE,
-        buildCounterCookieValue(
-          nextPhotoCount,
-          photoScope,
-          entitlements.threadId,
-          remainingMode,
-        ),
-      ),
-    );
-  }
-
-  headers.set("X-Plan", planLabel);
-  headers.set("X-User-Has-Account", entitlements.userHasAccount ? "1" : "0");
-  headers.set("X-Can-Voice", entitlements.capabilities.voice ? "1" : "0");
-  headers.set("X-Can-Photos", entitlements.capabilities.photos ? "1" : "0");
-  headers.set(
-    "X-Can-Links",
-    entitlements.capabilities.linksVisuals ? "1" : "0",
-  );
 
   const applyHeaders = (res: NextResponse) => {
     headers.forEach((value, key) => {
@@ -1022,21 +570,19 @@ export async function POST(req: Request) {
         [...body!.messages].reverse().find((m) => m.role === "user")?.content ??
         "";
       const shouldRecomputeScope =
-        !entitlements.threadId ||
-        hasScopeCues(lastUserMessage) ||
-        !SCOPE_CACHE.has(entitlements.threadId);
+        !threadId || hasScopeCues(lastUserMessage) || !SCOPE_CACHE.has(threadId);
       let scopeText = "";
 
       const scopeStart = Date.now();
       logEvent("[ai] scope-control start");
       if (shouldRecomputeScope) {
         const scopeInput = [
-          `USER_PLAN: ${entitlements.userPlan}`,
-          `USER_HAS_ACCOUNT: ${entitlements.userHasAccount ? "yes" : "no"}`,
+          `USER_PLAN: ${clientEntitlements.userPlan}`,
+          `USER_HAS_ACCOUNT: ${userHasAccount ? "yes" : "no"}`,
           `USER_COUNTRY: ${body!.userCountry ?? "unknown"}`,
           `USER_LANGUAGE: ${body!.userLanguage ?? "unknown"}`,
           `THREAD_CONTEXT: ${body!.threadContext ?? "unknown"}`,
-          `CAPABILITIES: voice=${entitlements.capabilities.voice ? "yes" : "no"}, photos=${entitlements.capabilities.photos ? "yes" : "no"}, linksVisuals=${entitlements.capabilities.linksVisuals ? "yes" : "no"}`,
+          `CAPABILITIES: voice=${clientEntitlements.capabilities.voice ? "yes" : "no"}, photos=${clientEntitlements.capabilities.photos ? "yes" : "no"}, linksVisuals=${clientEntitlements.capabilities.linksVisuals ? "yes" : "no"}`,
           "MESSAGES:",
           serializeMessages(body!.messages),
         ].join("\n");
@@ -1051,14 +597,14 @@ export async function POST(req: Request) {
 
         scopeText = getResponseOutputText(scopeResponse);
 
-        if (entitlements.threadId) {
-          SCOPE_CACHE.set(entitlements.threadId, {
+        if (threadId) {
+          SCOPE_CACHE.set(threadId, {
             text: scopeText,
             updatedAt: Date.now(),
           });
         }
-      } else if (entitlements.threadId) {
-        scopeText = SCOPE_CACHE.get(entitlements.threadId)?.text ?? "";
+      } else if (threadId) {
+        scopeText = SCOPE_CACHE.get(threadId)?.text ?? "";
       }
       logEvent("[ai] scope-control end", {
         ms: Date.now() - scopeStart,
@@ -1067,41 +613,15 @@ export async function POST(req: Request) {
       logEvent("[ai] verifier start");
       logEvent("[ai] verifier end", { ms: 0 });
 
-      const scopeClassification = parseScopeFromText(scopeText);
-      if (
-        (entitlements.userPlan === "small_fix" &&
-          (scopeClassification === "medium" || scopeClassification === "big")) ||
-        (entitlements.userPlan === "medium_fix" && scopeClassification === "big")
-      ) {
-        const mismatchKey = `mismatch:${entitlements.remainingKey}`;
-        const isRepeat = Boolean(BLOCKED_NOTICE.get(mismatchKey)?.mismatch);
-        const { text, actions, gating } = buildGatingResponse(
-          entitlements.userPlan,
-          "plan_mismatch",
-          scopeClassification,
-          isRepeat,
-        );
-        BLOCKED_NOTICE.set(mismatchKey, { mismatch: true });
-        logEvent("[ai] response plan mismatch");
-        return applyHeaders(
-          NextResponse.json({
-            text,
-            entitlements: clientEntitlements,
-            actions,
-            gating,
-          }),
-        );
-      }
-
       logEvent("[ai] primary start");
       const primaryStart = Date.now();
       const primaryInput = [
         "SCOPE_CONTROL:",
         scopeText,
         "CAPABILITIES:",
-        `voice=${entitlements.capabilities.voice ? "yes" : "no"}`,
-        `photos=${entitlements.capabilities.photos ? "yes" : "no"}`,
-        `linksVisuals=${entitlements.capabilities.linksVisuals ? "yes" : "no"}`,
+        `voice=${clientEntitlements.capabilities.voice ? "yes" : "no"}`,
+        `photos=${clientEntitlements.capabilities.photos ? "yes" : "no"}`,
+        `linksVisuals=${clientEntitlements.capabilities.linksVisuals ? "yes" : "no"}`,
         attachments.length > 0
           ? `ATTACHMENTS: ${attachments.length} image(s) included.`
           : null,
@@ -1133,6 +653,22 @@ export async function POST(req: Request) {
       const outputText = getResponseOutputText(primaryResponse);
       logEvent("[ai] primary end", { ms: Date.now() - primaryStart });
       logEvent("[ai] response json");
+
+      try {
+        await withTimeout(
+          fetchMutation(
+            creditsApi.entitlements.chargeAssistantCredits,
+            {
+              anonymousId: anonymousId ?? undefined,
+              turnId,
+              cost: assistantCost,
+            },
+            token ? { token } : {},
+          ),
+        );
+      } catch (error) {
+        console.error("[ai] credits charge error:", error);
+      }
 
       return applyHeaders(
         NextResponse.json({
@@ -1166,21 +702,19 @@ export async function POST(req: Request) {
           [...body!.messages].reverse().find((m) => m.role === "user")?.content ??
           "";
         const shouldRecomputeScope =
-          !entitlements.threadId ||
-          hasScopeCues(lastUserMessage) ||
-          !SCOPE_CACHE.has(entitlements.threadId);
+          !threadId || hasScopeCues(lastUserMessage) || !SCOPE_CACHE.has(threadId);
         let scopeText = "";
 
         const scopeStart = Date.now();
         logEvent("[ai] scope-control start");
         if (shouldRecomputeScope) {
           const scopeInput = [
-            `USER_PLAN: ${entitlements.userPlan}`,
-            `USER_HAS_ACCOUNT: ${entitlements.userHasAccount ? "yes" : "no"}`,
+            `USER_PLAN: ${clientEntitlements.userPlan}`,
+            `USER_HAS_ACCOUNT: ${userHasAccount ? "yes" : "no"}`,
             `USER_COUNTRY: ${body!.userCountry ?? "unknown"}`,
             `USER_LANGUAGE: ${body!.userLanguage ?? "unknown"}`,
             `THREAD_CONTEXT: ${body!.threadContext ?? "unknown"}`,
-            `CAPABILITIES: voice=${entitlements.capabilities.voice ? "yes" : "no"}, photos=${entitlements.capabilities.photos ? "yes" : "no"}, linksVisuals=${entitlements.capabilities.linksVisuals ? "yes" : "no"}`,
+            `CAPABILITIES: voice=${clientEntitlements.capabilities.voice ? "yes" : "no"}, photos=${clientEntitlements.capabilities.photos ? "yes" : "no"}, linksVisuals=${clientEntitlements.capabilities.linksVisuals ? "yes" : "no"}`,
             "MESSAGES:",
             serializeMessages(body!.messages),
           ].join("\n");
@@ -1195,14 +729,14 @@ export async function POST(req: Request) {
 
           scopeText = getResponseOutputText(scopeResponse);
 
-          if (entitlements.threadId) {
-            SCOPE_CACHE.set(entitlements.threadId, {
+          if (threadId) {
+            SCOPE_CACHE.set(threadId, {
               text: scopeText,
               updatedAt: Date.now(),
             });
           }
-        } else if (entitlements.threadId) {
-          scopeText = SCOPE_CACHE.get(entitlements.threadId)?.text ?? "";
+        } else if (threadId) {
+          scopeText = SCOPE_CACHE.get(threadId)?.text ?? "";
         }
         logEvent("[ai] scope-control end", {
           ms: Date.now() - scopeStart,
@@ -1211,50 +745,15 @@ export async function POST(req: Request) {
         logEvent("[ai] verifier start");
         logEvent("[ai] verifier end", { ms: 0 });
 
-        const scopeClassification = parseScopeFromText(scopeText);
-        if (
-          (entitlements.userPlan === "small_fix" &&
-            (scopeClassification === "medium" || scopeClassification === "big")) ||
-          (entitlements.userPlan === "medium_fix" &&
-            scopeClassification === "big")
-        ) {
-          const mismatchKey = `mismatch:${entitlements.remainingKey}`;
-          const isRepeat = Boolean(BLOCKED_NOTICE.get(mismatchKey)?.mismatch);
-          const { text, actions, gating } = buildGatingResponse(
-            entitlements.userPlan,
-            "plan_mismatch",
-            scopeClassification,
-            isRepeat,
-          );
-          BLOCKED_NOTICE.set(mismatchKey, { mismatch: true });
-          logEvent("[ai] response plan mismatch", {
-            plan: entitlements.userPlan,
-            scope: scopeClassification,
-            threadId: entitlements.threadId,
-          });
-          if (process.env.NODE_ENV === "development") {
-            console.debug("[ai] gate:plan_mismatch", {
-              plan: entitlements.userPlan,
-              scope: scopeClassification,
-              threadId: entitlements.threadId,
-            });
-          }
-          sendEvent("actions", { actions, gating });
-          sendEvent("delta", { text });
-          sendEvent("done", {});
-          controller.close();
-          return;
-        }
-
         logEvent("[ai] primary start");
         const primaryStart = Date.now();
         const primaryInput = [
           "SCOPE_CONTROL:",
           scopeText,
           "CAPABILITIES:",
-          `voice=${entitlements.capabilities.voice ? "yes" : "no"}`,
-          `photos=${entitlements.capabilities.photos ? "yes" : "no"}`,
-          `linksVisuals=${entitlements.capabilities.linksVisuals ? "yes" : "no"}`,
+          `voice=${clientEntitlements.capabilities.voice ? "yes" : "no"}`,
+          `photos=${clientEntitlements.capabilities.photos ? "yes" : "no"}`,
+          `linksVisuals=${clientEntitlements.capabilities.linksVisuals ? "yes" : "no"}`,
           attachments.length > 0
             ? `ATTACHMENTS: ${attachments.length} image(s) included.`
             : null,
@@ -1299,6 +798,21 @@ export async function POST(req: Request) {
           ) {
             logEvent("[ai] primary end", { ms: Date.now() - primaryStart });
             logEvent("[ai] response stream");
+            try {
+              await withTimeout(
+                fetchMutation(
+                  creditsApi.entitlements.chargeAssistantCredits,
+                  {
+                    anonymousId: anonymousId ?? undefined,
+                    turnId,
+                    cost: assistantCost,
+                  },
+                  token ? { token } : {},
+                ),
+              );
+            } catch (error) {
+              console.error("[ai] credits charge error:", error);
+            }
             sendEvent("done", {});
             controller.close();
             return;

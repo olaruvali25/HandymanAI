@@ -10,8 +10,10 @@
 
 import type * as auth from "../auth.js";
 import type * as chatHistory from "../chatHistory.js";
+import type * as credits from "../credits.js";
 import type * as entitlements from "../entitlements.js";
 import type * as http from "../http.js";
+import type * as plans from "../plans.js";
 import type * as tasks from "../tasks.js";
 import type * as users from "../users.js";
 
@@ -24,8 +26,10 @@ import type {
 declare const fullApi: ApiFromModules<{
   auth: typeof auth;
   chatHistory: typeof chatHistory;
+  credits: typeof credits;
   entitlements: typeof entitlements;
   http: typeof http;
+  plans: typeof plans;
   tasks: typeof tasks;
   users: typeof users;
 }>;

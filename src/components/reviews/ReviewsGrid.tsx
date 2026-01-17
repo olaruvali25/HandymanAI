@@ -38,8 +38,8 @@ export default function ReviewsGrid({ reviews }: ReviewsGridProps) {
   }, [activeFilter, reviews]);
 
   return (
-    <div className="mt-8">
-      <div className="flex flex-wrap gap-2">
+    <div className="mt-12">
+      <div className="flex flex-wrap gap-3">
         {filters.map((filter) => {
           const isActive = filter === activeFilter;
           return (
@@ -47,11 +47,10 @@ export default function ReviewsGrid({ reviews }: ReviewsGridProps) {
               key={filter}
               type="button"
               onClick={() => setActiveFilter(filter)}
-              className={`rounded-full border px-4 py-2 text-xs font-medium transition ${
-                isActive
-                  ? "border-[var(--accent)]/60 bg-[var(--accent)]/10 text-[var(--accent)]"
-                  : "border-[var(--border)] bg-[var(--surface)] text-[var(--muted)] hover:border-white/30 hover:text-white"
-              }`}
+              className={`rounded-full border px-5 py-2.5 text-xs font-bold uppercase tracking-widest transition-all duration-200 ${isActive
+                  ? "border-[var(--accent)] bg-[var(--accent)] text-black shadow-[0_0_20px_-5px_var(--accent)]"
+                  : "border-white/10 bg-white/5 text-white/60 hover:border-white/20 hover:bg-white/10 hover:text-white"
+                }`}
             >
               {filter}
             </button>
@@ -59,54 +58,54 @@ export default function ReviewsGrid({ reviews }: ReviewsGridProps) {
         })}
       </div>
 
-      <div className="mt-6 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-3 lg:gap-8">
         {filteredReviews.map((review) => (
           <article
             key={review.id}
-            className="rounded-2xl border border-[var(--border)] bg-[linear-gradient(160deg,rgba(255,255,255,0.06),rgba(255,255,255,0.02))] p-6 shadow-[var(--shadow-soft)]"
+            className="group relative flex h-full flex-col rounded-3xl border border-white/10 bg-white/5 p-8 shadow-xl backdrop-blur-sm transition-all duration-300 hover:-translate-y-1 hover:border-white/20 hover:bg-white/[0.07] hover:shadow-2xl hover:shadow-black/50"
           >
             <div className="flex items-start justify-between gap-4">
               <div>
-                <div className="text-sm font-semibold text-white">
+                <div className="text-lg font-semibold text-white">
                   {review.name}
                 </div>
-                <div className="text-xs text-[var(--muted)]">
+                <div className="text-xs font-medium uppercase tracking-widest text-[var(--muted)]">
                   {review.region}
                 </div>
               </div>
               <div className="text-right">
                 <StarRating rating={review.rating} />
-                <div className="mt-1 text-xs text-[var(--muted)]">
+                <div className="mt-1 text-xs font-medium text-[var(--muted)]">
                   {review.rating.toFixed(1)}
                 </div>
               </div>
             </div>
 
             {review.highlight ? (
-              <div className="mt-3 inline-flex items-center rounded-full border border-[var(--accent)]/30 bg-[var(--accent)]/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-[var(--accent)]">
+              <div className="mt-4 inline-flex self-start rounded-full bg-[var(--accent)] px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-black shadow-lg shadow-[var(--accent)]/20">
                 {review.highlight}
               </div>
             ) : null}
 
-            <div className="mt-4 rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-xs text-[var(--muted)]">
+            <div className="mt-6 rounded-xl border border-white/5 bg-black/20 px-4 py-3 text-sm leading-relaxed text-[var(--muted)]">
               <span className="font-semibold text-white">Problem:</span>{" "}
               {review.problem}
-              <span className="mx-2 text-white/30">/</span>
+              <span className="mx-2 text-white/20">/</span>
               <span className="font-semibold text-white">Fix:</span>{" "}
               {review.fix}
             </div>
 
-            <div className="mt-4 space-y-3 text-sm text-white/80">
+            <div className="mt-6 space-y-4 text-sm leading-relaxed text-white/80">
               {review.body.map((line, index) => (
                 <p key={`${review.id}-line-${index}`}>{line}</p>
               ))}
             </div>
 
-            <div className="mt-4 flex flex-wrap gap-2">
+            <div className="mt-auto pt-6 flex flex-wrap gap-2">
               {review.tags.map((tag) => (
                 <span
                   key={`${review.id}-${tag}`}
-                  className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[10px] font-medium uppercase tracking-[0.2em] text-white/60"
+                  className="rounded-full border border-white/5 bg-white/5 px-3 py-1 text-[10px] font-medium uppercase tracking-widest text-white/50 transition-colors group-hover:border-white/10 group-hover:text-white/70"
                 >
                   {tag}
                 </span>

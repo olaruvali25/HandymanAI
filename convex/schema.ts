@@ -2,6 +2,10 @@ import { authTables } from "@convex-dev/auth/server";
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 import { planSchema } from "./plans";
+import {
+  chatAttachmentValidator,
+  chatMessageRoleValidator,
+} from "./validators/chat";
 
 const schema = defineSchema({
   ...authTables,
@@ -60,13 +64,9 @@ const schema = defineSchema({
     userId: v.optional(v.id("users")),
     anonymousId: v.optional(v.string()),
     guestChatId: v.optional(v.string()),
-    role: v.union(
-      v.literal("user"),
-      v.literal("assistant"),
-      v.literal("system"),
-    ),
+    role: chatMessageRoleValidator,
     contentText: v.string(),
-    attachments: v.optional(v.array(v.any())),
+    attachments: v.optional(v.array(chatAttachmentValidator)),
     createdAt: v.number(),
   }).index("by_thread_createdAt", ["threadId", "createdAt"]),
   creditCharges: defineTable({

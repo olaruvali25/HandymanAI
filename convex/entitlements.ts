@@ -62,7 +62,10 @@ const findCharge = async (
     return ctx.db
       .query("creditCharges")
       .withIndex("by_anonymous_turn_stage", (q) =>
-        q.eq("anonymousId", actor.anonymousId).eq("turnId", turnId).eq("stage", stage),
+        q
+          .eq("anonymousId", actor.anonymousId)
+          .eq("turnId", turnId)
+          .eq("stage", stage),
       )
       .unique();
   }
@@ -83,9 +86,7 @@ export const getCreditsForActor = query({
     }
     const anonymousUser = await ctx.db
       .query("anonymousUsers")
-      .withIndex("by_anonymousId", (q) =>
-        q.eq("anonymousId", anonymousId),
-      )
+      .withIndex("by_anonymousId", (q) => q.eq("anonymousId", anonymousId))
       .unique();
     return { credits: anonymousUser?.credits ?? 0 };
   },
@@ -116,14 +117,20 @@ export const reserveCredits = mutation({
         const { credits } = await ensureUserCredits(ctx, actor.userId);
         return { credits };
       }
-      const { credits } = await ensureAnonymousUser(ctx, actor.anonymousId as string);
+      const { credits } = await ensureAnonymousUser(
+        ctx,
+        actor.anonymousId as string,
+      );
       return { credits };
     }
 
     const now = Date.now();
     if (actor.userId) {
       const { credits } = await ensureUserCredits(ctx, actor.userId);
-      const minimum = typeof args.minimumCredits === "number" ? args.minimumCredits : args.cost;
+      const minimum =
+        typeof args.minimumCredits === "number"
+          ? args.minimumCredits
+          : args.cost;
       if (credits < minimum) {
         throw new Error("INSUFFICIENT_CREDITS");
       }
@@ -147,7 +154,8 @@ export const reserveCredits = mutation({
       ctx,
       actor.anonymousId as string,
     );
-    const minimum = typeof args.minimumCredits === "number" ? args.minimumCredits : args.cost;
+    const minimum =
+      typeof args.minimumCredits === "number" ? args.minimumCredits : args.cost;
     if (credits < minimum) {
       throw new Error("INSUFFICIENT_CREDITS");
     }
@@ -197,7 +205,10 @@ export const chargeAssistantCredits = mutation({
         const { credits } = await ensureUserCredits(ctx, actor.userId);
         return { credits };
       }
-      const { credits } = await ensureAnonymousUser(ctx, actor.anonymousId as string);
+      const { credits } = await ensureAnonymousUser(
+        ctx,
+        actor.anonymousId as string,
+      );
       return { credits };
     }
 
@@ -257,9 +268,7 @@ export const syncAnonymousToUser = mutation({
 
     const anonymousUser = await ctx.db
       .query("anonymousUsers")
-      .withIndex("by_anonymousId", (q) =>
-        q.eq("anonymousId", args.anonymousId),
-      )
+      .withIndex("by_anonymousId", (q) => q.eq("anonymousId", args.anonymousId))
       .unique();
     if (!anonymousUser || anonymousUser.mergedToUserId) {
       return { mergedThreads: 0, creditsTransferred: 0 };
@@ -279,9 +288,7 @@ export const syncAnonymousToUser = mutation({
 
     const threads = await ctx.db
       .query("chatThreads")
-      .withIndex("by_anonymousId", (q) =>
-        q.eq("anonymousId", args.anonymousId),
-      )
+      .withIndex("by_anonymousId", (q) => q.eq("anonymousId", args.anonymousId))
       .collect();
     if (threads.length === 0) {
       const legacyThreads = await ctx.db
@@ -301,9 +308,7 @@ export const syncAnonymousToUser = mutation({
       });
       const messages = await ctx.db
         .query("chatMessages")
-        .withIndex("by_thread_createdAt", (q) =>
-          q.eq("threadId", thread._id),
-        )
+        .withIndex("by_thread_createdAt", (q) => q.eq("threadId", thread._id))
         .collect();
       for (const message of messages) {
         await ctx.db.patch(message._id, {

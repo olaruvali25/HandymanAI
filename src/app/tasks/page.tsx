@@ -61,7 +61,7 @@ export default function TasksPage() {
       <Container>
         <div className="mx-auto max-w-2xl space-y-6">
           <div>
-            <p className="text-xs uppercase tracking-[0.2em] text-[var(--accent-soft)]">
+            <p className="text-xs tracking-[0.2em] text-[var(--accent-soft)] uppercase">
               Demo feature
             </p>
             <h1 className="font-display text-3xl font-semibold text-white sm:text-4xl">
@@ -94,7 +94,9 @@ export default function TasksPage() {
                     setTitle("");
                   } catch (err) {
                     setError(
-                      err instanceof Error ? err.message : "Failed to add task.",
+                      err instanceof Error
+                        ? err.message
+                        : "Failed to add task.",
                     );
                   } finally {
                     setIsSubmitting(false);
@@ -112,7 +114,7 @@ export default function TasksPage() {
               </form>
 
               {error ? (
-                <div className="mt-4 rounded-[var(--radius-md)] border border-border bg-black/30 px-4 py-3 text-sm text-[var(--accent-soft)]">
+                <div className="border-border mt-4 rounded-[var(--radius-md)] border bg-black/30 px-4 py-3 text-sm text-[var(--accent-soft)]">
                   {error}
                 </div>
               ) : null}
@@ -135,7 +137,7 @@ export default function TasksPage() {
                   {tasks.map((task) => (
                     <li
                       key={task._id}
-                      className="flex items-center gap-3 rounded-[var(--radius-md)] border border-border bg-black/20 px-4 py-3"
+                      className="border-border flex items-center gap-3 rounded-[var(--radius-md)] border bg-black/20 px-4 py-3"
                     >
                       <Checkbox
                         checked={task.completed}
@@ -194,4 +196,3 @@ export default function TasksPage() {
     </section>
   );
 }
-

@@ -3,11 +3,14 @@ import type { NextRequest } from "next/server";
 const getTargetUrl = (request: NextRequest, authPath: string) => {
   const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL;
   if (!convexUrl) return null;
-  const target = new URL(request.url);
-  const deployment = new URL(convexUrl);
-  target.protocol = deployment.protocol;
-  target.host = deployment.host;
-  target.pathname = `/api/auth/${authPath}`;
+
+  // Convex Auth endpoints live on the .site domain, not .cloud
+  const url = convexUrl.replace(".cloud", ".site");
+  const deployment = new URL(url);
+  const original = new URL(request.url);
+
+  const target = new URL(`/api/auth/${authPath}`, deployment);
+  target.search = original.search;
   return target;
 };
 

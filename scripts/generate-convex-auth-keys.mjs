@@ -36,4 +36,3 @@ process.stdout.write(
     "npx convex env set JWKS $jwks",
   ].join("\n"),
 );
-

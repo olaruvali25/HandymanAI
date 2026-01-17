@@ -22,10 +22,10 @@ export default function AboutPage() {
         <Container>
           <div className="relative z-10 grid gap-16 lg:grid-cols-[1.1fr_0.9fr]">
             <div className="flex flex-col justify-center">
-              <div className="inline-flex self-start items-center gap-2 rounded-full border border-[var(--accent)]/30 bg-[var(--accent)]/10 px-4 py-1.5 text-xs font-bold uppercase tracking-widest text-[var(--accent)] shadow-[0_0_15px_-5px_var(--accent)]">
+              <div className="inline-flex items-center gap-2 self-start rounded-full border border-[var(--accent)]/30 bg-[var(--accent)]/10 px-4 py-1.5 text-xs font-bold tracking-widest text-[var(--accent)] uppercase shadow-[0_0_15px_-5px_var(--accent)]">
                 AI handyman, built for DIY confidence
               </div>
-              <h1 className="mt-8 font-display text-5xl font-bold tracking-tighter text-white sm:text-6xl lg:text-7xl">
+              <h1 className="font-display mt-8 text-5xl font-bold tracking-tighter text-white sm:text-6xl lg:text-7xl">
                 Fixly is your AI handyman for fast, safe DIY repair help.
               </h1>
               <p className="mt-8 max-w-2xl text-lg leading-relaxed text-[var(--muted)] sm:text-xl">
@@ -45,7 +45,7 @@ export default function AboutPage() {
                     key={step}
                     className="group rounded-2xl border border-white/10 bg-white/5 px-5 py-4 text-sm text-white transition-all duration-300 hover:-translate-y-1 hover:bg-white/10 hover:shadow-lg"
                   >
-                    <div className="text-xs font-bold uppercase tracking-widest text-[var(--muted)] group-hover:text-[var(--accent)]">
+                    <div className="text-xs font-bold tracking-widest text-[var(--muted)] uppercase group-hover:text-[var(--accent)]">
                       Step {index + 1}
                     </div>
                     <div className="mt-2 font-semibold">{step}</div>
@@ -70,9 +70,9 @@ export default function AboutPage() {
             </div>
 
             <div className="relative flex items-center">
-              <div className="absolute -right-12 -top-12 h-64 w-64 rounded-full bg-[var(--accent)]/10 blur-3xl" />
+              <div className="absolute -top-12 -right-12 h-64 w-64 rounded-full bg-[var(--accent)]/10 blur-3xl" />
               <div className="relative w-full rounded-3xl border border-white/10 bg-white/5 p-8 shadow-2xl backdrop-blur-md">
-                <div className="flex items-center gap-3 text-xs font-medium uppercase tracking-widest text-[var(--muted)]">
+                <div className="flex items-center gap-3 text-xs font-medium tracking-widest text-[var(--muted)] uppercase">
                   <span className="relative flex h-2 w-2">
                     <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75"></span>
                     <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500"></span>
@@ -84,7 +84,7 @@ export default function AboutPage() {
                     Kitchen sink leak
                   </div>
                   <div className="self-start rounded-2xl rounded-tl-sm bg-[var(--accent)]/10 px-4 py-3 text-sm text-white">
-                    <div className="mb-2 text-xs font-bold uppercase tracking-wider text-[var(--accent)]">
+                    <div className="mb-2 text-xs font-bold tracking-wider text-[var(--accent)] uppercase">
                       Suggested Fix
                     </div>
                     <ul className="space-y-2 text-white/80">
@@ -173,7 +173,7 @@ export default function AboutPage() {
                   key={value}
                   className="group rounded-3xl border border-white/10 bg-white/5 px-6 py-6 text-sm text-white shadow-xl backdrop-blur-sm transition-all duration-300 hover:-translate-y-1 hover:bg-white/10 hover:shadow-2xl"
                 >
-                  <div className="mb-3 text-xs font-bold uppercase tracking-widest text-[var(--muted)] group-hover:text-[var(--accent)]">
+                  <div className="mb-3 text-xs font-bold tracking-widest text-[var(--muted)] uppercase group-hover:text-[var(--accent)]">
                     Promise
                   </div>
                   <div className="font-semibold text-white">{value}</div>
@@ -209,7 +209,9 @@ export default function AboutPage() {
                 </li>
                 <li className="flex items-start gap-3">
                   <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-[var(--accent)]" />
-                  <span>Faster for small repairs like leaks, doors, and mounting.</span>
+                  <span>
+                    Faster for small repairs like leaks, doors, and mounting.
+                  </span>
                 </li>
                 <li className="flex items-start gap-3">
                   <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-[var(--accent)]" />
@@ -222,9 +224,7 @@ export default function AboutPage() {
               </ul>
             </div>
             <div className="rounded-3xl border border-white/10 bg-white/5 p-8 shadow-xl">
-              <div className="text-lg font-bold text-white">
-                Pro handyman
-              </div>
+              <div className="text-lg font-bold text-white">Pro handyman</div>
               <ul className="mt-6 space-y-4 text-sm text-[var(--muted)]">
                 <li className="flex items-start gap-3">
                   <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-white/20" />
@@ -314,7 +314,7 @@ export default function AboutPage() {
                 },
               ].map((item) => (
                 <div key={item.title} className="relative pl-6">
-                  <div className="absolute left-0 top-2.5 h-1.5 w-1.5 rounded-full bg-[var(--accent)] shadow-[0_0_8px_var(--accent)]" />
+                  <div className="absolute top-2.5 left-0 h-1.5 w-1.5 rounded-full bg-[var(--accent)] shadow-[0_0_8px_var(--accent)]" />
                   <div className="text-base font-bold text-white">
                     {item.title}
                   </div>
@@ -343,12 +343,15 @@ export default function AboutPage() {
               </li>
               <li className="flex items-start gap-3">
                 <span className="mt-2 h-1.5 w-1.5 rounded-full bg-[var(--accent)]" />
-                <span>Suggests shutting off water or breakers when appropriate.</span>
+                <span>
+                  Suggests shutting off water or breakers when appropriate.
+                </span>
               </li>
               <li className="flex items-start gap-3">
                 <span className="mt-2 h-1.5 w-1.5 rounded-full bg-[var(--accent)]" />
                 <span>
-                  Encourages pros for gas, serious electrical, or structural work.
+                  Encourages pros for gas, serious electrical, or structural
+                  work.
                 </span>
               </li>
             </ul>
@@ -371,13 +374,13 @@ export default function AboutPage() {
               <div className="mt-10 flex flex-wrap justify-center gap-4">
                 <Link
                   href="/"
-                  className="inline-flex items-center justify-center rounded-full bg-[var(--accent)] px-8 py-4 text-sm font-semibold text-black shadow-[0_0_20px_-5px_var(--accent)] transition-all duration-200 hover:bg-[var(--accent)]/90 hover:scale-[1.02] hover:shadow-[0_0_25px_-5px_var(--accent)] active:scale-[0.98]"
+                  className="inline-flex items-center justify-center rounded-full bg-[var(--accent)] px-8 py-4 text-sm font-semibold text-black shadow-[0_0_20px_-5px_var(--accent)] transition-all duration-200 hover:scale-[1.02] hover:bg-[var(--accent)]/90 hover:shadow-[0_0_25px_-5px_var(--accent)] active:scale-[0.98]"
                 >
                   Start a chat now
                 </Link>
                 <Link
                   href="/pricing"
-                  className="inline-flex items-center justify-center rounded-full border border-white/10 bg-white/5 px-8 py-4 text-sm font-semibold text-white transition-all duration-200 hover:bg-white/10 hover:scale-[1.02] active:scale-[0.98]"
+                  className="inline-flex items-center justify-center rounded-full border border-white/10 bg-white/5 px-8 py-4 text-sm font-semibold text-white transition-all duration-200 hover:scale-[1.02] hover:bg-white/10 active:scale-[0.98]"
                 >
                   View pricing
                 </Link>

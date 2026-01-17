@@ -1,27 +1,9 @@
-export type Capabilities = {
-  voice: boolean;
-  photos: boolean;
-  linksVisuals: boolean;
-  history: boolean;
-  favorites: boolean;
-  premiumVisuals: "none" | "limited" | "full";
-  photoLimit: number | null;
-};
-
-export type GatingFlags = {
-  must_prompt_signup_after_this: boolean;
-  must_prompt_payment_after_this: boolean;
-};
-
-export type ClientEntitlements = {
-  userHasAccount: boolean;
-  userPlan: "credits";
-  remainingReplies: number | null;
-  remainingSource?: "server";
-  capabilities: Capabilities;
-  gating: GatingFlags;
-  credits?: number;
-};
+import type {
+  Capabilities,
+  ClientEntitlements,
+  GatingFlags,
+} from "@/lib/schemas/entitlements";
+export type { Capabilities, ClientEntitlements, GatingFlags };
 
 export const THREAD_COOKIE = "fixly_thread";
 export const ANON_COOKIE = "fixly_anon";

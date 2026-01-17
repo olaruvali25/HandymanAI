@@ -23,7 +23,10 @@ export async function POST(req: Request) {
 
   const text = body.text.trim();
   if (text.length === 0 || text.length > MAX_TTS_CHARS) {
-    return NextResponse.json({ error: "Invalid text length." }, { status: 400 });
+    return NextResponse.json(
+      { error: "Invalid text length." },
+      { status: 400 },
+    );
   }
 
   const voice = body.voice === "echo" ? "echo" : "nova";

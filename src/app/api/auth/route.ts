@@ -11,7 +11,10 @@ type AuthActionBody = {
 const JSON_HEADERS = { "Content-Type": "application/json" };
 
 function json(body: unknown, status = 200) {
-  return new NextResponse(JSON.stringify(body), { status, headers: JSON_HEADERS });
+  return new NextResponse(JSON.stringify(body), {
+    status,
+    headers: JSON_HEADERS,
+  });
 }
 
 function isLocalHost(host: string | null) {
@@ -88,7 +91,10 @@ export async function POST(request: Request) {
     return json({ error: "Invalid JSON body." }, 400);
   }
 
-  if (!body || (body.action !== "auth:signIn" && body.action !== "auth:signOut")) {
+  if (
+    !body ||
+    (body.action !== "auth:signIn" && body.action !== "auth:signOut")
+  ) {
     return json({ error: "Invalid action." }, 400);
   }
 
@@ -122,7 +128,10 @@ export async function POST(request: Request) {
       );
 
       if (result?.redirect) {
-        const response = json({ redirect: result.redirect });
+        const response = json({
+          redirect: result.redirect,
+          verifier: result.verifier,
+        });
         setCookie(response, names.verifier, result.verifier ?? null, host);
         return response;
       }
@@ -139,7 +148,12 @@ export async function POST(request: Request) {
           setCookie(response, names.refreshToken, null, host);
         } else {
           setCookie(response, names.token, result.tokens.token, host);
-          setCookie(response, names.refreshToken, result.tokens.refreshToken, host);
+          setCookie(
+            response,
+            names.refreshToken,
+            result.tokens.refreshToken,
+            host,
+          );
         }
         setCookie(response, names.verifier, null, host);
         return response;

@@ -1,12 +1,14 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 
-import { mutation, query } from "./_generated/server";
+import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 
 const DEFAULT_ANON_CREDITS = 9;
 const DEFAULT_USER_CREDITS = 15;
 
-const ensureUserCredits = async (ctx: any, userId: string) => {
+type ConvexCtx = QueryCtx | MutationCtx;
+
+const ensureUserCredits = async (ctx: ConvexCtx, userId: string) => {
   const user = await ctx.db.get(userId);
   if (!user) {
     throw new Error("User not found");
@@ -21,10 +23,10 @@ const ensureUserCredits = async (ctx: any, userId: string) => {
   return { doc: user, credits: DEFAULT_USER_CREDITS };
 };
 
-const ensureAnonymousUser = async (ctx: any, anonymousId: string) => {
+const ensureAnonymousUser = async (ctx: ConvexCtx, anonymousId: string) => {
   const existing = await ctx.db
     .query("anonymousUsers")
-    .withIndex("by_anonymousId", (q: any) => q.eq("anonymousId", anonymousId))
+    .withIndex("by_anonymousId", (q) => q.eq("anonymousId", anonymousId))
     .unique();
   if (existing) {
     return { doc: existing, credits: existing.credits };
@@ -41,7 +43,7 @@ const ensureAnonymousUser = async (ctx: any, anonymousId: string) => {
 };
 
 const findCharge = async (
-  ctx: any,
+  ctx: ConvexCtx,
   actor: { userId?: string; anonymousId?: string },
   turnId: string,
   stage: "user" | "assistant",
@@ -49,7 +51,7 @@ const findCharge = async (
   if (actor.userId) {
     return ctx.db
       .query("creditCharges")
-      .withIndex("by_user_turn_stage", (q: any) =>
+      .withIndex("by_user_turn_stage", (q) =>
         q.eq("userId", actor.userId).eq("turnId", turnId).eq("stage", stage),
       )
       .unique();
@@ -57,7 +59,7 @@ const findCharge = async (
   if (actor.anonymousId) {
     return ctx.db
       .query("creditCharges")
-      .withIndex("by_anonymous_turn_stage", (q: any) =>
+      .withIndex("by_anonymous_turn_stage", (q) =>
         q.eq("anonymousId", actor.anonymousId).eq("turnId", turnId).eq("stage", stage),
       )
       .unique();
@@ -78,7 +80,7 @@ export const getCreditsForActor = query({
     }
     const anonymousUser = await ctx.db
       .query("anonymousUsers")
-      .withIndex("by_anonymousId", (q: any) =>
+      .withIndex("by_anonymousId", (q) =>
         q.eq("anonymousId", args.anonymousId),
       )
       .unique();
@@ -252,7 +254,7 @@ export const syncAnonymousToUser = mutation({
 
     const anonymousUser = await ctx.db
       .query("anonymousUsers")
-      .withIndex("by_anonymousId", (q: any) =>
+      .withIndex("by_anonymousId", (q) =>
         q.eq("anonymousId", args.anonymousId),
       )
       .unique();
@@ -274,14 +276,14 @@ export const syncAnonymousToUser = mutation({
 
     const threads = await ctx.db
       .query("chatThreads")
-      .withIndex("by_anonymousId", (q: any) =>
+      .withIndex("by_anonymousId", (q) =>
         q.eq("anonymousId", args.anonymousId),
       )
       .collect();
     if (threads.length === 0) {
       const legacyThreads = await ctx.db
         .query("chatThreads")
-        .withIndex("by_guestChatId", (q: any) =>
+        .withIndex("by_guestChatId", (q) =>
           q.eq("guestChatId", args.anonymousId),
         )
         .collect();
@@ -296,7 +298,7 @@ export const syncAnonymousToUser = mutation({
       });
       const messages = await ctx.db
         .query("chatMessages")
-        .withIndex("by_thread_createdAt", (q: any) =>
+        .withIndex("by_thread_createdAt", (q) =>
           q.eq("threadId", thread._id),
         )
         .collect();

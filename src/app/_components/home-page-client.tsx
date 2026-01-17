@@ -2,7 +2,6 @@
 
 import { useEffect } from "react";
 import { useSearchParams } from "next/navigation";
-import Container from "@/components/Container";
 import GrokThread from "@/components/chat/GrokThread";
 
 export default function HomePageClient() {

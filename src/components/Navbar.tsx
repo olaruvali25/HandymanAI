@@ -17,7 +17,11 @@ export default function Navbar() {
   const { user } = useUser();
   const displayName = user?.name || user?.email || "Account";
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [credits, setCredits] = useState<number | null>(null);
+  const [credits, setCredits] = useState<number | null>(() => {
+    if (typeof window === "undefined") return null;
+    const cached = localStorage.getItem("fixly_credits");
+    return cached && Number.isFinite(Number(cached)) ? Number(cached) : null;
+  });
   const menuRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -58,10 +62,6 @@ export default function Navbar() {
         })
         .catch(() => {});
     };
-    const cached = localStorage.getItem("fixly_credits");
-    if (cached && Number.isFinite(Number(cached))) {
-      setCredits(Number(cached));
-    }
     refreshCredits();
     window.addEventListener("focus", refreshCredits);
     window.addEventListener("fixly-credits-update", handleCreditsUpdate);

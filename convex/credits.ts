@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 import { getAuthUserId } from "@convex-dev/auth/server";
 
-import { mutation } from "./_generated/server";
+import { mutation, type MutationCtx } from "./_generated/server";
 import { planSchema, type Plan } from "./plans";
 
 export const getMonthlyCreditsForPlan = (plan: Plan) => {
@@ -12,7 +12,7 @@ export const getMonthlyCreditsForPlan = (plan: Plan) => {
 };
 
 const applyGrant = async (
-  ctx: any,
+  ctx: MutationCtx,
   args: {
     userId: string;
     type: "plan_monthly" | "plan_start" | "topup";
@@ -25,7 +25,7 @@ const applyGrant = async (
 ) => {
   const existingEvent = await ctx.db
     .query("creditGrants")
-    .withIndex("by_event", (q: any) => q.eq("eventId", args.eventId))
+    .withIndex("by_event", (q) => q.eq("eventId", args.eventId))
     .unique();
   if (existingEvent) {
     return { granted: false, reason: "event_exists" } as const;
@@ -34,7 +34,7 @@ const applyGrant = async (
   if (args.type === "plan_monthly" && args.periodKey) {
     const existingPeriod = await ctx.db
       .query("creditGrants")
-      .withIndex("by_user_type_period", (q: any) =>
+      .withIndex("by_user_type_period", (q) =>
         q
           .eq("userId", args.userId)
           .eq("type", args.type)
@@ -78,7 +78,7 @@ const applyGrant = async (
   return { granted: true, credits: nextCredits } as const;
 };
 
-const requireAdminOrDev = async (ctx: any) => {
+const requireAdminOrDev = async (ctx: MutationCtx) => {
   const userId = await getAuthUserId(ctx);
   if (!userId) {
     throw new Error("Unauthorized");

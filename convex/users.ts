@@ -1,7 +1,7 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 
-import { mutation, query } from "./_generated/server";
+import { mutation, query, type MutationCtx } from "./_generated/server";
 import { PLAN_VALUES, type Plan, planSchema } from "./plans";
 
 export const me = query({
@@ -26,7 +26,7 @@ const normalizePlanValue = (value: unknown): Plan | null => {
   return PLAN_VALUES.includes(lower as Plan) ? (lower as Plan) : null;
 };
 
-const requireAdminOrDev = async (ctx: any) => {
+const requireAdminOrDev = async (ctx: MutationCtx) => {
   const userId = await getAuthUserId(ctx);
   if (!userId) {
     throw new Error("Unauthorized");

@@ -179,6 +179,19 @@ const createChatAdapter = (options?: {
     const userCountry = getCountryFromLocale(fallbackLocale);
 
     try {
+      const lastContent = messages[messages.length - 1]?.content;
+      const imageParts = Array.isArray(lastContent)
+        ? lastContent.filter(
+            (
+              part,
+            ): part is { type: "image"; image: string; filename?: string } =>
+              typeof part === "object" &&
+              part !== null &&
+              "type" in part &&
+              (part as { type?: string }).type === "image" &&
+              "image" in part,
+          )
+        : [];
       const response = await fetch("/api/ai", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -189,11 +202,10 @@ const createChatAdapter = (options?: {
           threadContext: "web-chat",
           anonymousId: options?.anonymousId ?? undefined,
           attachments:
-            messages[messages.length - 1]?.role === "user"
-              ? (messages[messages.length - 1]?.content as any[])
-                ?.filter((part) => part.type === "image")
-                ?.map((part) => {
-                  const dataUrl = part.image as string;
+            messages[messages.length - 1]?.role === "user" &&
+            imageParts.length > 0
+              ? imageParts.map((part) => {
+                  const dataUrl = part.image;
                   const mimeType = dataUrl.startsWith("data:")
                     ? dataUrl.slice(5, dataUrl.indexOf(";"))
                     : "image/png";
@@ -378,6 +390,13 @@ const detectLanguageCode = (text: string, fallback: string) => {
 const getCountryFromLocale = (locale: string) => {
   const parts = locale.split("-");
   return parts[1] || "unknown";
+};
+
+const buildGuestChatId = () => {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return crypto.randomUUID();
+  }
+  return `guest-${Date.now()}`;
 };
 
 function CameraIcon() {
@@ -686,7 +705,6 @@ type ComposerProps = {
   setVoiceGender: (value: "female" | "male") => void;
   canVoice: boolean;
   canPhotos: boolean;
-  inlineThread?: boolean;
 };
 
 const Composer = ({
@@ -701,7 +719,6 @@ const Composer = ({
   setVoiceGender,
   canVoice,
   canPhotos,
-  inlineThread = false,
 }: ComposerProps) => {
   const api = useAssistantApi();
   const isEmpty = useAssistantState((state) => state.composer.isEmpty);
@@ -1135,7 +1152,15 @@ export default function GrokThread({
   initialThreadId?: string | null;
 }) {
   const { isAuthenticated } = useConvexAuth();
-  const [guestChatId, setGuestChatId] = useState<string | null>(null);
+  const [guestChatId, setGuestChatId] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
+    const existing = localStorage.getItem("fixly_guest_chat_id");
+    if (existing) return existing;
+    if (isAuthenticated) return null;
+    const created = buildGuestChatId();
+    localStorage.setItem("fixly_guest_chat_id", created);
+    return created;
+  });
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [selectedLanguage, setSelectedLanguage] = useState("auto");
   const [speechEnabled, setSpeechEnabled] = useState(true);
@@ -1190,13 +1215,7 @@ export default function GrokThread({
     [guestChatId, setEntitlementsWithSource],
   );
   const runtime = useLocalRuntime(chatAdapter);
-  const createGuestChatId = useCallback(() => {
-    if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
-      return crypto.randomUUID();
-    }
-    return `guest-${Date.now()}`;
-  }, []);
-
+  const createGuestChatId = buildGuestChatId;
   useEffect(() => {
     let isMounted = true;
     fetch("/api/ai")
@@ -1232,26 +1251,17 @@ export default function GrokThread({
 
   useEffect(() => {
     if (initialThreadId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setActiveThreadId(initialThreadId);
     }
   }, [initialThreadId]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    if (isAuthenticated) {
-      const existing = localStorage.getItem("fixly_guest_chat_id");
-      setGuestChatId(existing);
-      return;
-    }
-    const existing = localStorage.getItem("fixly_guest_chat_id");
-    if (existing) {
-      setGuestChatId(existing);
-      return;
-    }
-    const created = createGuestChatId();
-    localStorage.setItem("fixly_guest_chat_id", created);
-    setGuestChatId(created);
-  }, [createGuestChatId, isAuthenticated]);
+    if (!guestChatId || isAuthenticated) return;
+    if (localStorage.getItem("fixly_guest_chat_id") === guestChatId) return;
+    localStorage.setItem("fixly_guest_chat_id", guestChatId);
+  }, [guestChatId, isAuthenticated]);
 
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -1743,6 +1753,7 @@ const ChatThreadContent = ({
   }, [
     appendMessages,
     guestChatId,
+    isAuthenticated,
     shouldPersistHistory,
     createThread,
     createGuestChatId,
@@ -1750,6 +1761,7 @@ const ChatThreadContent = ({
     lastAssistantStatus,
     lastMessageRole,
     setActiveThreadId,
+    setGuestChatId,
     threadMessagesState,
   ]);
 
@@ -1831,7 +1843,6 @@ const ChatThreadContent = ({
                     setVoiceGender={setVoiceGender}
                     canVoice={entitlements.capabilities.voice}
                     canPhotos={entitlements.capabilities.photos}
-                    inlineThread={inlineThread}
                   />
                 </div>
               </ThreadPrimitive.Empty>
@@ -1861,7 +1872,6 @@ const ChatThreadContent = ({
                   setVoiceGender={setVoiceGender}
                   canVoice={entitlements.capabilities.voice}
                   canPhotos={entitlements.capabilities.photos}
-                  inlineThread={inlineThread}
                 />
               </ComposerContainer>
             </ThreadPrimitive.Root>

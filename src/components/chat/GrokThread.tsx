@@ -1382,6 +1382,7 @@ export default function GrokThread({
   );
   const chatAdapter = useMemo(
     () =>
+      // eslint-disable-next-line react-hooks/refs
       createChatAdapter({
         onEntitlements: (next) => {
           setEntitlementsWithSource(next, "api");
@@ -1413,17 +1414,15 @@ export default function GrokThread({
 
   useEffect(() => {
     if (!entitlements.capabilities.photos && selectedFile) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSelectedFile(null);
     }
-  }, [entitlements.capabilities.photos, selectedFile]);
+  }, [entitlements.capabilities.photos, selectedFile, setSelectedFile]);
 
   useEffect(() => {
     if (initialThreadId) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setActiveThreadId(initialThreadId);
     }
-  }, [initialThreadId]);
+  }, [initialThreadId, setActiveThreadId]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -1514,9 +1513,6 @@ export default function GrokThread({
           appendMessages={appendMessages}
           renameThread={renameThread}
           deleteThread={deleteThread}
-          uploadAttachments={uploadAttachments}
-          getRegisteredAttachments={getRegisteredAttachments}
-          registerAttachments={registerAttachments}
           selectedFile={selectedFile}
           setSelectedFile={setSelectedFile}
           selectedLanguage={selectedLanguage}
@@ -1555,9 +1551,6 @@ const ChatThreadContent = ({
   appendMessages,
   renameThread,
   deleteThread,
-  uploadAttachments,
-  getRegisteredAttachments,
-  registerAttachments,
   selectedFile,
   setSelectedFile,
   selectedLanguage,
@@ -1604,15 +1597,6 @@ const ChatThreadContent = ({
     title: string;
   }) => Promise<null>;
   deleteThread: (args: { threadId: Id<"chatThreads"> }) => Promise<null>;
-  uploadAttachments: (
-    parts: Array<{ type: "image"; image: string; filename?: string }>,
-    messageId?: string,
-  ) => Promise<ChatAttachment[]>;
-  getRegisteredAttachments: (messageId?: string) => ChatAttachment[] | null;
-  registerAttachments: (
-    messageId: string | undefined,
-    attachments: ChatAttachment[],
-  ) => void;
   selectedFile: File | null;
   setSelectedFile: (file: File | null) => void;
   selectedLanguage: string;

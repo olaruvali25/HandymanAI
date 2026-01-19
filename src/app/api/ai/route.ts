@@ -621,7 +621,6 @@ export async function POST(req: Request) {
         }
       }
 
-      const userHasPlan = plan && plan !== "none";
       const assistantMessage = !userHasAccount
         ? "You need to log in or create an account to continue."
         : plan === "none"

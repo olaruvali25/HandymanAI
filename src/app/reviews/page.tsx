@@ -197,15 +197,15 @@ export const metadata: Metadata = {
 export default function ReviewsPage() {
   return (
     <div className="min-h-dvh bg-[var(--bg)]">
-      <section className="relative overflow-hidden py-24 lg:py-32">
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-[rgba(255,122,26,0.15)] via-transparent to-transparent opacity-70" />
+      <section className="relative overflow-hidden pt-20 pb-24 lg:pt-32 lg:pb-32">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-[rgba(255,122,26,0.12)] via-transparent to-transparent opacity-80" />
         <Container>
           <div className="relative z-10 grid gap-16 lg:grid-cols-[1.1fr_0.9fr]">
             <div className="flex flex-col justify-center">
-              <div className="inline-flex items-center gap-2 self-start rounded-full border border-[var(--accent)]/30 bg-[var(--accent)]/10 px-4 py-1.5 text-xs font-bold tracking-widest text-[var(--accent)] uppercase shadow-[0_0_15px_-5px_var(--accent)]">
+              <div className="inline-flex items-center gap-2 self-start rounded-full border border-[var(--accent)]/20 bg-[var(--accent)]/5 px-4 py-1.5 text-[10px] font-bold tracking-[0.2em] text-[var(--accent)] uppercase shadow-[0_0_20px_-5px_var(--accent)]/20">
                 Fixly reviews from early users
               </div>
-              <h1 className="font-display mt-8 text-5xl font-bold tracking-tighter text-white sm:text-6xl lg:text-7xl">
+              <h1 className="font-display mt-8 text-5xl font-semibold tracking-tight text-white sm:text-6xl lg:text-7xl lg:leading-[1.1]">
                 Real stories from people who fixed it themselves.
               </h1>
               <p className="mt-8 max-w-2xl text-lg leading-relaxed text-[var(--muted)] sm:text-xl">
@@ -213,12 +213,12 @@ export default function ReviewsPage() {
                 photo or use voice guidance, save time and money vs a handyman,
                 and know when to pause and call a pro.
               </p>
-              <p className="mt-4 max-w-2xl text-sm leading-relaxed text-[var(--muted)]">
+              <p className="mt-6 max-w-2xl text-[13px] leading-relaxed text-[var(--muted)]/60">
                 These Fixly reviews include plumbing leak fix wins, door hinge
                 repair, mounting, and patch work from our home repair chatbot
                 community.
               </p>
-              <div className="mt-8 flex flex-wrap gap-3">
+              <div className="mt-10 flex flex-wrap gap-2.5">
                 {[
                   "Photo-aware guidance",
                   "Voice-friendly steps",
@@ -226,7 +226,7 @@ export default function ReviewsPage() {
                 ].map((chip) => (
                   <span
                     key={chip}
-                    className="rounded-full border border-white/10 bg-white/5 px-5 py-2.5 text-xs font-medium text-white/80 transition-colors hover:bg-white/10"
+                    className="rounded-full border border-white/5 bg-white/[0.03] px-5 py-2 text-[13px] font-medium text-white/60 transition-colors hover:border-white/10 hover:text-white/80"
                   >
                     {chip}
                   </span>
@@ -235,42 +235,42 @@ export default function ReviewsPage() {
             </div>
 
             <div className="relative flex items-center">
-              <div className="absolute -top-12 -right-12 h-64 w-64 rounded-full bg-[var(--accent)]/10 blur-3xl" />
-              <div className="relative w-full rounded-3xl border border-white/10 bg-white/5 p-8 shadow-2xl backdrop-blur-md">
-                <div className="text-xs font-medium tracking-widest text-[var(--muted)] uppercase">
+              <div className="absolute -top-12 -right-12 h-64 w-64 rounded-full bg-[var(--accent)]/5 blur-[100px]" />
+              <div className="relative w-full rounded-[2.5rem] border border-white/10 bg-white/[0.02] p-8 shadow-2xl backdrop-blur-xl">
+                <div className="text-[10px] font-bold tracking-[0.2em] text-[var(--muted)] uppercase">
                   Early community rating
                 </div>
-                <div className="mt-6 flex items-end justify-between gap-4">
+                <div className="mt-8 flex items-end justify-between gap-6">
                   <div>
-                    <div className="text-5xl font-bold tracking-tight text-white">
+                    <div className="text-5xl font-semibold tracking-tight text-white">
                       4.8
                     </div>
-                    <div className="mt-1 text-sm text-[var(--muted)]">
+                    <div className="mt-2 text-sm text-[var(--muted)]">
                       Average (early user feedback)
                     </div>
                   </div>
                   <div className="text-right">
                     <StarRating rating={4.8} size={24} />
-                    <div className="mt-2 text-xs font-medium text-[var(--muted)]">
+                    <div className="mt-3 text-[10px] font-bold tracking-[0.1em] text-[var(--muted)] uppercase">
                       Not audited, shared by beta users
                     </div>
                   </div>
                 </div>
 
-                <div className="mt-8 space-y-4">
+                <div className="mt-10 space-y-5">
                   {ratingBreakdown.map((row) => (
                     <div
                       key={row.rating}
-                      className="flex items-center gap-4 text-xs font-medium text-[var(--muted)]"
+                      className="flex items-center gap-5 text-[10px] font-bold tracking-[0.1em] text-[var(--muted)] uppercase"
                     >
-                      <span className="w-12">{row.rating} star</span>
-                      <div className="h-2 flex-1 overflow-hidden rounded-full bg-white/5">
+                      <span className="w-14">{row.rating} star</span>
+                      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/5">
                         <div
-                          className="h-full rounded-full bg-[var(--accent)] shadow-[0_0_10px_-2px_var(--accent)]"
+                          className="h-full rounded-full bg-[var(--accent)] shadow-[0_0_12px_-2px_var(--accent)]"
                           style={{ width: `${row.share}%` }}
                         />
                       </div>
-                      <span className="w-8 text-right text-white/60">
+                      <span className="w-10 text-right text-white/40">
                         {row.share}%
                       </span>
                     </div>
@@ -284,19 +284,19 @@ export default function ReviewsPage() {
 
       <div className="mx-auto h-1 w-24 rounded-full bg-[var(--accent)]" />
 
-      <section className="py-24">
+      <section className="py-32 lg:py-40">
         <Container>
-          <div className="flex flex-wrap items-end justify-between gap-6">
-            <div>
-              <h2 className="font-display text-3xl font-bold tracking-tight text-white sm:text-4xl">
+          <div className="flex flex-wrap items-end justify-between gap-8">
+            <div className="max-w-2xl">
+              <h2 className="font-display text-3xl font-semibold tracking-tight text-white sm:text-4xl lg:text-5xl">
                 Reviews that feel like real jobs.
               </h2>
-              <p className="mt-4 max-w-2xl text-lg text-[var(--muted)]">
+              <p className="mt-8 text-lg leading-relaxed text-[var(--muted)]">
                 Every story below is written in a human voice, with the problem
                 and the fix called out clearly.
               </p>
             </div>
-            <div className="rounded-full border border-white/10 bg-white/5 px-5 py-2.5 text-xs font-medium text-white/80 backdrop-blur-sm">
+            <div className="rounded-full border border-white/5 bg-white/[0.03] px-6 py-2.5 text-[11px] font-bold tracking-[0.1em] text-white/40 uppercase backdrop-blur-sm">
               DIY-friendly, small and medium fixes
             </div>
           </div>
@@ -307,26 +307,26 @@ export default function ReviewsPage() {
 
       <div className="mx-auto h-1 w-24 rounded-full bg-[var(--accent)]" />
 
-      <section className="py-24">
+      <section className="py-32 lg:py-40">
         <Container>
-          <div className="rounded-3xl border border-white/10 bg-white/5 p-8 shadow-xl backdrop-blur-sm md:p-12">
-            <h2 className="font-display text-2xl font-bold tracking-tight text-white sm:text-3xl">
+          <div className="rounded-[2.5rem] border border-white/5 bg-white/[0.02] p-10 shadow-xl backdrop-blur-sm md:p-16">
+            <h2 className="font-display text-2xl font-semibold tracking-tight text-white sm:text-3xl lg:text-4xl">
               Before you trust us, trust the limits.
             </h2>
-            <ul className="mt-6 space-y-3 text-base leading-relaxed text-[var(--muted)]">
-              <li className="flex items-start gap-3">
-                <span className="mt-2 h-1.5 w-1.5 rounded-full bg-[var(--accent)]" />
+            <ul className="mt-10 space-y-5 text-lg leading-relaxed text-[var(--muted)]">
+              <li className="flex items-start gap-4">
+                <span className="mt-2.5 h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--accent)] shadow-[0_0_8px_var(--accent)]" />
                 <span>Fixly is great for small and medium DIY repairs.</span>
               </li>
-              <li className="flex items-start gap-3">
-                <span className="mt-2 h-1.5 w-1.5 rounded-full bg-[var(--accent)]" />
+              <li className="flex items-start gap-4">
+                <span className="mt-2.5 h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--accent)] shadow-[0_0_8px_var(--accent)]" />
                 <span>
                   For gas, serious electrical, or structural work, we will tell
                   you to call a licensed pro.
                 </span>
               </li>
-              <li className="flex items-start gap-3">
-                <span className="mt-2 h-1.5 w-1.5 rounded-full bg-[var(--accent)]" />
+              <li className="flex items-start gap-4">
+                <span className="mt-2.5 h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--accent)] shadow-[0_0_8px_var(--accent)]" />
                 <span>Safety and clarity come before speed.</span>
               </li>
             </ul>
@@ -334,27 +334,27 @@ export default function ReviewsPage() {
         </Container>
       </section>
 
-      <section className="pb-24">
+      <section className="pb-32 lg:pb-40">
         <Container>
-          <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-white/5 px-8 py-16 text-center shadow-2xl backdrop-blur-sm md:px-16">
-            <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-[var(--accent)]/10 to-transparent opacity-50" />
+          <div className="relative overflow-hidden rounded-[3rem] border border-white/10 bg-white/[0.02] px-8 py-20 text-center shadow-2xl backdrop-blur-sm md:px-16 lg:py-28">
+            <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-[var(--accent)]/10 to-transparent opacity-40" />
             <div className="relative z-10">
-              <h2 className="font-display text-3xl font-bold tracking-tight text-white sm:text-4xl">
+              <h2 className="font-display text-3xl font-semibold tracking-tight text-white sm:text-4xl lg:text-5xl">
                 Try Fixly on your next small fix.
               </h2>
-              <p className="mx-auto mt-6 max-w-xl text-lg text-[var(--muted)]">
+              <p className="mx-auto mt-8 max-w-xl text-lg leading-relaxed text-[var(--muted)]">
                 Start a chat with your AI handyman and get unstuck in minutes.
               </p>
-              <div className="mt-10 flex flex-wrap justify-center gap-4">
+              <div className="mt-12 flex flex-wrap justify-center gap-4">
                 <Link
                   href="/"
-                  className="inline-flex items-center justify-center rounded-full bg-[var(--accent)] px-8 py-4 text-sm font-semibold text-black shadow-[0_0_20px_-5px_var(--accent)] transition-all duration-200 hover:scale-[1.02] hover:bg-[var(--accent)]/90 hover:shadow-[0_0_25px_-5px_var(--accent)] active:scale-[0.98]"
+                  className="inline-flex items-center justify-center rounded-full bg-[var(--accent)] px-10 py-4 text-[15px] font-bold text-black shadow-[0_0_30px_-5px_var(--accent)]/40 transition-all duration-300 hover:scale-[1.02] hover:bg-[var(--accent)]/90 hover:shadow-[0_0_40px_-5px_var(--accent)]/50 active:scale-[0.98]"
                 >
                   Start a chat
                 </Link>
                 <Link
                   href="/pricing"
-                  className="inline-flex items-center justify-center rounded-full border border-white/10 bg-white/5 px-8 py-4 text-sm font-semibold text-white transition-all duration-200 hover:scale-[1.02] hover:bg-white/10 active:scale-[0.98]"
+                  className="inline-flex items-center justify-center rounded-full border border-white/10 bg-white/[0.05] px-10 py-4 text-[15px] font-bold text-white transition-all duration-300 hover:scale-[1.02] hover:bg-white/10 active:scale-[0.98]"
                 >
                   See pricing
                 </Link>

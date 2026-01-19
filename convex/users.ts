@@ -1,8 +1,14 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 
-import { mutation, query, type MutationCtx } from "./_generated/server";
-import { PLAN_VALUES, type Plan, planSchema } from "./plans";
+import {
+  internalMutation,
+  internalQuery,
+  mutation,
+  query,
+  type MutationCtx,
+} from "./_generated/server";
+import { PLAN_VALUES, type Plan, planSchema } from "./billingConfig";
 
 export const me = query({
   args: {},
@@ -94,5 +100,80 @@ export const normalizeUserPlans = mutation({
     }
 
     return { updated };
+  },
+});
+
+export const addCredits = internalMutation({
+  args: {
+    userId: v.id("users"),
+    amount: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const user = await ctx.db.get(args.userId);
+    if (!user) {
+      throw new Error("User not found");
+    }
+    const nextCredits = (user.credits ?? 0) + args.amount;
+    await ctx.db.patch(args.userId, {
+      credits: nextCredits,
+      updatedAt: Date.now(),
+    });
+    return { credits: nextCredits };
+  },
+});
+
+export const updateStripeSubscription = internalMutation({
+  args: {
+    userId: v.id("users"),
+    plan: planSchema,
+    stripeCustomerId: v.union(v.string(), v.null()),
+    stripeSubscriptionId: v.union(v.string(), v.null()),
+    stripeSubscriptionStatus: v.union(v.string(), v.null()),
+    stripeCurrentPeriodEnd: v.union(v.number(), v.null()),
+    stripePriceId: v.union(v.string(), v.null()),
+    currentPeriodStart: v.optional(v.number()),
+    currentPeriodEnd: v.optional(v.number()),
+    billingAnchor: v.optional(v.number()),
+    nextRenewalAt: v.optional(v.number()),
+    pendingDowngradePlan: v.optional(planSchema),
+  },
+  handler: async (ctx, args) => {
+    const user = await ctx.db.get(args.userId);
+    if (!user) {
+      throw new Error("User not found");
+    }
+    await ctx.db.patch(args.userId, {
+      plan: args.plan,
+      pendingDowngradePlan: args.pendingDowngradePlan ?? user.pendingDowngradePlan,
+      stripeCustomerId: args.stripeCustomerId ?? undefined,
+      stripeSubscriptionId: args.stripeSubscriptionId ?? undefined,
+      stripeSubscriptionStatus: args.stripeSubscriptionStatus ?? undefined,
+      stripeCurrentPeriodEnd: args.stripeCurrentPeriodEnd ?? undefined,
+      stripePriceId: args.stripePriceId ?? undefined,
+      currentPeriodStart: args.currentPeriodStart ?? user.currentPeriodStart,
+      currentPeriodEnd: args.currentPeriodEnd ?? user.currentPeriodEnd,
+      billingAnchor: args.billingAnchor ?? user.billingAnchor,
+      nextRenewalAt: args.nextRenewalAt ?? user.nextRenewalAt,
+      updatedAt: Date.now(),
+    });
+  },
+});
+
+export const getById = internalQuery({
+  args: { userId: v.id("users") },
+  handler: async (ctx, args) => {
+    return ctx.db.get(args.userId);
+  },
+});
+
+export const getByStripeCustomerId = internalQuery({
+  args: { stripeCustomerId: v.string() },
+  handler: async (ctx, args) => {
+    return ctx.db
+      .query("users")
+      .withIndex("by_stripeCustomerId", (q) =>
+        q.eq("stripeCustomerId", args.stripeCustomerId),
+      )
+      .unique();
   },
 });

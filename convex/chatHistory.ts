@@ -12,8 +12,34 @@ import {
   chatAttachmentValidator,
   chatMessageRoleValidator,
 } from "./validators/chat";
+import { insertLedgerEntry } from "./creditLedger";
 
 type ConvexCtx = QueryCtx | MutationCtx;
+
+const hydrateAttachments = async (
+  ctx: QueryCtx,
+  attachments: {
+    name: string;
+    type: string;
+    size: number;
+    storageId?: Id<"_storage">;
+    url?: string;
+    dataUrl?: string;
+  }[],
+) => {
+  return Promise.all(
+    attachments.map(async (attachment) => {
+      if (attachment.url || attachment.dataUrl || !attachment.storageId) {
+        return attachment;
+      }
+      const url = await ctx.storage.getUrl(attachment.storageId);
+      return {
+        ...attachment,
+        url: url ?? undefined,
+      };
+    }),
+  );
+};
 
 const requireAuthenticatedUser = async (ctx: ConvexCtx) => {
   const userId = await getAuthUserId(ctx);
@@ -90,13 +116,25 @@ export const getThreadMessages = query({
       .order("asc")
       .collect();
 
-    return messages.map((message) => ({
-      id: message._id,
-      role: message.role,
-      contentText: message.contentText,
-      createdAt: message.createdAt,
-      attachments: message.attachments ?? [],
-    }));
+    return Promise.all(
+      messages.map(async (message) => ({
+        id: message._id,
+        role: message.role,
+        contentText: message.contentText,
+        createdAt: message.createdAt,
+        attachments: await hydrateAttachments(
+          ctx,
+          (message.attachments ?? []) as {
+            name: string;
+            type: string;
+            size: number;
+            storageId?: Id<"_storage">;
+            url?: string;
+            dataUrl?: string;
+          }[],
+        ),
+      })),
+    );
   },
 });
 
@@ -122,13 +160,25 @@ export const getThreadMessagesForActor = query({
       .order("asc")
       .collect();
 
-    return messages.map((message) => ({
-      id: message._id,
-      role: message.role,
-      contentText: message.contentText,
-      createdAt: message.createdAt,
-      attachments: message.attachments ?? [],
-    }));
+    return Promise.all(
+      messages.map(async (message) => ({
+        id: message._id,
+        role: message.role,
+        contentText: message.contentText,
+        createdAt: message.createdAt,
+        attachments: await hydrateAttachments(
+          ctx,
+          (message.attachments ?? []) as {
+            name: string;
+            type: string;
+            size: number;
+            storageId?: Id<"_storage">;
+            url?: string;
+            dataUrl?: string;
+          }[],
+        ),
+      })),
+    );
   },
 });
 
@@ -267,15 +317,47 @@ export const mergeGuestThreads = mutation({
       const user = await ctx.db.get(userId);
       const currentCredits =
         typeof user?.credits === "number" ? user.credits : 0;
-      const nextCredits = currentCredits + (anonymousUser.credits ?? 0);
-      await ctx.db.patch(userId, {
-        credits: nextCredits,
-        updatedAt: Date.now(),
-      });
+      const anonCredits = anonymousUser.credits ?? 0;
+      const now = Date.now();
+      let nextCredits = currentCredits;
+
+      if (anonCredits > 0) {
+        nextCredits += anonCredits;
+        await ctx.db.patch(userId, {
+          credits: nextCredits,
+          updatedAt: now,
+        });
+        await insertLedgerEntry(ctx, {
+          actorType: "user",
+          userId,
+          kind: "anon_initial_20",
+          amount: anonCredits,
+          balanceAfter: nextCredits,
+          createdAt: now,
+        });
+      }
+
+      if (!user?.loginBonusGrantedAt) {
+        nextCredits += 10;
+        await ctx.db.patch(userId, {
+          credits: nextCredits,
+          loginBonusGrantedAt: now,
+          updatedAt: now,
+        });
+        await insertLedgerEntry(ctx, {
+          actorType: "user",
+          userId,
+          kind: "login_bonus_10",
+          amount: 10,
+          balanceAfter: nextCredits,
+          createdAt: now,
+        });
+      }
+
       await ctx.db.patch(anonymousUser._id, {
         credits: 0,
         mergedToUserId: userId,
-        updatedAt: Date.now(),
+        updatedAt: now,
       });
     }
 

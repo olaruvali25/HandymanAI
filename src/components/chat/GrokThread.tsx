@@ -31,7 +31,11 @@ import {
   type ThreadUserMessagePart,
   type ThreadMessage,
 } from "@assistant-ui/react";
-import type { ChatAttachment, ChatMessageRole } from "@/lib/schemas/chat";
+import {
+  CHAT_MAX_IMAGE_ATTACHMENT_BYTES,
+  type ChatAttachment,
+  type ChatMessageRole,
+} from "@/lib/schemas/chat";
 import {
   ClientEntitlementsSchema,
   type ClientEntitlements,
@@ -166,10 +170,39 @@ const buildPayloadMessages = (messages: readonly ThreadMessage[]) => {
     .filter((message) => message.content.length > 0);
 };
 
+const buildHistoryContent = (message: HistoryMessage) => {
+  const parts: Array<TextMessagePart | { type: "image"; image: string; filename?: string }> =
+    [];
+  if (message.contentText.trim()) {
+    parts.push({ type: "text", text: message.contentText });
+  }
+  const attachments = message.attachments ?? [];
+  for (const attachment of attachments) {
+    const url = attachment.url ?? attachment.dataUrl;
+    if (!url) continue;
+    parts.push({
+      type: "image",
+      image: url,
+      filename: attachment.name,
+    });
+  }
+  return parts.length > 0 ? parts : [{ type: "text", text: "" }];
+};
+
 const createChatAdapter = (options?: {
   onEntitlements?: (entitlements: Entitlements) => void;
   onMessageActions?: (actions: MessageActions | null) => void;
   anonymousId?: string | null;
+  threadId?: string | null;
+  uploadAttachments?: (
+    parts: Array<{ type: "image"; image: string; filename?: string }>,
+    messageId?: string,
+  ) => Promise<ChatAttachment[]>;
+  getRegisteredAttachments?: (messageId?: string) => ChatAttachment[] | null;
+  registerAttachments?: (
+    messageId: string | undefined,
+    attachments: ChatAttachment[],
+  ) => void;
 }): ChatModelAdapter => ({
   async *run({ messages, abortSignal }) {
     options?.onMessageActions?.(null);
@@ -187,7 +220,8 @@ const createChatAdapter = (options?: {
     const userCountry = getCountryFromLocale(fallbackLocale);
 
     try {
-      const lastContent = messages[messages.length - 1]?.content;
+      const lastMessage = messages[messages.length - 1];
+      const lastContent = lastMessage?.content;
       const imageParts = Array.isArray(lastContent)
         ? lastContent.filter(
             (
@@ -200,6 +234,28 @@ const createChatAdapter = (options?: {
               "image" in part,
           )
         : [];
+      const messageId =
+        lastMessage && typeof lastMessage === "object" && "id" in lastMessage
+          ? String((lastMessage as { id?: string }).id ?? "")
+          : undefined;
+      let uploadedAttachments: ChatAttachment[] = [];
+      if (imageParts.length > 0) {
+        const cached = options?.getRegisteredAttachments?.(messageId);
+        if (cached && cached.length > 0) {
+          uploadedAttachments = cached;
+        } else if (options?.uploadAttachments) {
+          uploadedAttachments = await options.uploadAttachments(
+            imageParts,
+            messageId,
+          );
+          if (uploadedAttachments.length > 0) {
+            options?.registerAttachments?.(messageId, uploadedAttachments);
+          }
+        }
+        if (uploadedAttachments.length === 0) {
+          throw new Error("ATTACHMENTS_FAILED");
+        }
+      }
       const response = await fetch("/api/ai", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -208,22 +264,12 @@ const createChatAdapter = (options?: {
           userCountry,
           userLanguage: locale,
           threadContext: "web-chat",
+          threadId: options?.threadId ?? undefined,
           anonymousId: options?.anonymousId ?? undefined,
           attachments:
             messages[messages.length - 1]?.role === "user" &&
-            imageParts.length > 0
-              ? imageParts.map((part) => {
-                  const dataUrl = part.image;
-                  const mimeType = dataUrl.startsWith("data:")
-                    ? dataUrl.slice(5, dataUrl.indexOf(";"))
-                    : "image/png";
-                  return {
-                    dataUrl,
-                    type: mimeType,
-                    name: part.filename ?? "image.png",
-                    size: 0,
-                  };
-                })
+            uploadedAttachments.length > 0
+              ? uploadedAttachments
               : undefined,
         }),
         signal: abortSignal,
@@ -236,6 +282,7 @@ const createChatAdapter = (options?: {
             error?: string;
             entitlements?: unknown;
             actions?: MessageActions;
+            assistantMessage?: string;
           };
           const entitlements = ClientEntitlementsSchema.safeParse(
             errorPayload?.entitlements,
@@ -248,6 +295,16 @@ const createChatAdapter = (options?: {
           }
           if (errorPayload?.actions) {
             options?.onMessageActions?.(errorPayload.actions);
+          }
+          if (
+            errorPayload?.error === "INSUFFICIENT_CREDITS" &&
+            errorPayload.assistantMessage
+          ) {
+            yield {
+              content: [{ type: "text", text: errorPayload.assistantMessage }],
+              status: { type: "complete", reason: "stop" },
+            };
+            return;
           }
         } catch {
           // ignore parse failures
@@ -368,14 +425,15 @@ const createChatAdapter = (options?: {
         return;
       }
 
+      const messageText =
+        error instanceof Error && error.message !== "ATTACHMENTS_FAILED"
+          ? error.message
+          : "We could not reach the server. Please try again.";
       yield {
         content: [
           {
             type: "text",
-            text:
-              error instanceof Error
-                ? error.message
-                : "We could not reach the server. Please try again.",
+            text: messageText,
           },
         ],
         status: { type: "incomplete", reason: "error", error: "api_error" },
@@ -408,6 +466,21 @@ const detectLanguageCode = (text: string, fallback: string) => {
 const getCountryFromLocale = (locale: string) => {
   const parts = locale.split("-");
   return parts[1] || "unknown";
+};
+
+const dataUrlToBlob = (dataUrl: string) => {
+  const [meta, base64] = dataUrl.split(",");
+  if (!meta || !base64) {
+    throw new Error("Invalid data URL.");
+  }
+  const mimeMatch = meta.match(/data:(.*?);base64/);
+  const mime = mimeMatch?.[1] ?? "image/png";
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return new Blob([bytes], { type: mime });
 };
 
 const buildGuestChatId = () => {
@@ -1237,9 +1310,69 @@ export default function GrokThread({
   ) as HistoryMessage[] | undefined;
   const createThread = useMutation(api.chatHistory.createThread);
   const appendMessages = useMutation(api.chatHistory.appendMessages);
+  const generateUploadUrl = useMutation(api.attachments.generateUploadUrl);
   const mergeGuestThreads = useMutation(api.chatHistory.mergeGuestThreads);
   const renameThread = useMutation(api.chatHistory.renameThread);
   const deleteThread = useMutation(api.chatHistory.deleteThread);
+  const uploadedAttachmentsRef = useRef<Map<string, ChatAttachment[]>>(
+    new Map(),
+  );
+  const getRegisteredAttachments = useCallback(
+    (messageId?: string) => {
+      if (!messageId) return null;
+      return uploadedAttachmentsRef.current.get(messageId) ?? null;
+    },
+    [],
+  );
+  const registerAttachments = useCallback(
+    (messageId: string | undefined, attachments: ChatAttachment[]) => {
+      if (!messageId || attachments.length === 0) return;
+      uploadedAttachmentsRef.current.set(messageId, attachments);
+    },
+    [],
+  );
+  const uploadAttachments = useCallback(
+    async (
+      parts: Array<{ type: "image"; image: string; filename?: string }>,
+      messageId?: string,
+    ) => {
+      if (parts.length === 0) return [];
+      const existing = getRegisteredAttachments(messageId);
+      if (existing && existing.length > 0) return existing;
+
+      const uploaded: ChatAttachment[] = [];
+      for (const part of parts) {
+        try {
+          const blob = dataUrlToBlob(part.image);
+          if (blob.size <= 0 || blob.size > CHAT_MAX_IMAGE_ATTACHMENT_BYTES) {
+            continue;
+          }
+          const { url } = await generateUploadUrl({});
+          const upload = await fetch(url, {
+            method: "POST",
+            headers: { "Content-Type": blob.type },
+            body: blob,
+          });
+          if (!upload.ok) continue;
+          const payload = (await upload.json()) as { storageId?: string };
+          if (!payload.storageId) continue;
+          uploaded.push({
+            name: part.filename ?? "image.png",
+            type: blob.type,
+            size: blob.size,
+            storageId: payload.storageId,
+          });
+        } catch {
+          continue;
+        }
+      }
+      if (uploaded.length > 0) {
+        registerAttachments(messageId, uploaded);
+      }
+      return uploaded;
+    },
+    [generateUploadUrl, getRegisteredAttachments, registerAttachments],
+  );
   const setEntitlementsWithSource = useCallback(
     (value: Entitlements, source: "init" | "api" = "api") => {
       queryClient.setQueryData(entitlementsQueryKey, value);
@@ -1255,8 +1388,19 @@ export default function GrokThread({
         },
         onMessageActions: setMessageActions,
         anonymousId: guestChatId,
+        threadId: activeThreadId,
+        uploadAttachments,
+        getRegisteredAttachments,
+        registerAttachments,
       }),
-    [guestChatId, setEntitlementsWithSource],
+    [
+      guestChatId,
+      activeThreadId,
+      setEntitlementsWithSource,
+      uploadAttachments,
+      getRegisteredAttachments,
+      registerAttachments,
+    ],
   );
   const runtime = useLocalRuntime(chatAdapter);
   const createGuestChatId = buildGuestChatId;
@@ -1370,6 +1514,9 @@ export default function GrokThread({
           appendMessages={appendMessages}
           renameThread={renameThread}
           deleteThread={deleteThread}
+          uploadAttachments={uploadAttachments}
+          getRegisteredAttachments={getRegisteredAttachments}
+          registerAttachments={registerAttachments}
           selectedFile={selectedFile}
           setSelectedFile={setSelectedFile}
           selectedLanguage={selectedLanguage}
@@ -1408,6 +1555,9 @@ const ChatThreadContent = ({
   appendMessages,
   renameThread,
   deleteThread,
+  uploadAttachments,
+  getRegisteredAttachments,
+  registerAttachments,
   selectedFile,
   setSelectedFile,
   selectedLanguage,
@@ -1454,6 +1604,15 @@ const ChatThreadContent = ({
     title: string;
   }) => Promise<null>;
   deleteThread: (args: { threadId: Id<"chatThreads"> }) => Promise<null>;
+  uploadAttachments: (
+    parts: Array<{ type: "image"; image: string; filename?: string }>,
+    messageId?: string,
+  ) => Promise<ChatAttachment[]>;
+  getRegisteredAttachments: (messageId?: string) => ChatAttachment[] | null;
+  registerAttachments: (
+    messageId: string | undefined,
+    attachments: ChatAttachment[],
+  ) => void;
   selectedFile: File | null;
   setSelectedFile: (file: File | null) => void;
   selectedLanguage: string;
@@ -1559,6 +1718,7 @@ const ChatThreadContent = ({
   const loadedThreadRef = useRef<string | null>(null);
   const lastPersistedCountRef = useRef(0);
   const isPersistingRef = useRef(false);
+  const isCreatingThreadRef = useRef(false);
   const activeThreadIdRef = useRef<string | null>(activeThreadId);
 
   const clearTts = () => {
@@ -1573,6 +1733,7 @@ const ChatThreadContent = ({
     ttsNextPlayRef.current = 0;
     lastAssistantLengthRef.current = 0;
   };
+
 
   const playNextAudio = useCallback(function playNextAudioInner() {
     if (ttsSpeakingRef.current) return;
@@ -1632,12 +1793,7 @@ const ChatThreadContent = ({
     if (loadedThreadRef.current === activeThreadId) return;
     const initialMessages = threadMessages.map((message) => ({
       role: message.role,
-      content: [
-        {
-          type: "text",
-          text: message.contentText,
-        } as TextMessagePart,
-      ],
+      content: buildHistoryContent(message),
     }));
     api.thread().reset(initialMessages);
     loadedThreadRef.current = activeThreadId;
@@ -1719,6 +1875,121 @@ const ChatThreadContent = ({
     enqueueTts,
   ]);
 
+  const extractAttachmentsForMessage = useCallback(
+    (message: ThreadMessage): ChatAttachment[] => {
+      const messageId =
+        message && typeof message === "object" && "id" in message
+          ? String((message as { id?: string }).id ?? "")
+          : undefined;
+      const cached = getRegisteredAttachments(messageId);
+      if (cached && cached.length > 0) {
+        return cached;
+      }
+
+      if (!Array.isArray(message.content)) return [];
+      const legacy = message.content
+        .filter(
+          (
+            part,
+          ): part is { type: "image"; image: string; filename?: string } =>
+            typeof part === "object" &&
+            part !== null &&
+            "type" in part &&
+            (part as { type?: string }).type === "image" &&
+            "image" in part,
+        )
+        .map((part) => {
+          const dataUrl = part.image;
+          const mimeType = dataUrl.startsWith("data:")
+            ? dataUrl.slice(5, dataUrl.indexOf(";"))
+            : "image/png";
+          return {
+            name: part.filename ?? "image.png",
+            type: mimeType,
+            size: 0,
+            dataUrl,
+          };
+        });
+      return legacy;
+    },
+    [getRegisteredAttachments],
+  );
+
+  useEffect(() => {
+    if (!shouldPersistHistory) return;
+    if (activeThreadIdRef.current) return;
+    if (isCreatingThreadRef.current) return;
+    const firstUserIndex = threadMessagesState.findIndex(
+      (message) => message.role === "user",
+    );
+    if (firstUserIndex === -1) return;
+    if (!isAuthenticated && !guestChatId && typeof window !== "undefined") {
+      const created = createGuestChatId();
+      localStorage.setItem("fixly_guest_chat_id", created);
+      setGuestChatId(created);
+      return;
+    }
+
+    isCreatingThreadRef.current = true;
+    const persist = async () => {
+      const firstUser = threadMessagesState[firstUserIndex];
+      const titleSource = firstUser ? extractText(firstUser).trim() : "Chat";
+      const title =
+        titleSource.split("\n")[0].slice(0, 48) || "New repair chat";
+      const threadId = await createThread({
+        title,
+        guestChatId: isAuthenticated ? undefined : (guestChatId ?? undefined),
+      });
+      setActiveThreadId(threadId);
+      loadedThreadRef.current = threadId;
+
+      const initialMessages = threadMessagesState
+        .slice(0, firstUserIndex + 1)
+        .map((message) => {
+          const contentText = extractText(message).trim();
+          const attachments = extractAttachmentsForMessage(message);
+          return {
+            role: message.role,
+            contentText,
+            attachments: attachments.length > 0 ? attachments : undefined,
+          };
+        })
+        .filter(
+          (message) =>
+            message.contentText.length > 0 ||
+            (message.attachments?.length ?? 0) > 0,
+        );
+
+      if (initialMessages.length > 0) {
+        await appendMessages({
+          threadId: threadId as Id<"chatThreads">,
+          guestChatId: guestChatId ?? undefined,
+          messages: initialMessages,
+        });
+        lastPersistedCountRef.current = firstUserIndex + 1;
+      } else {
+        lastPersistedCountRef.current = threadMessagesState.length;
+      }
+    };
+
+    persist()
+      .catch(() => {})
+      .finally(() => {
+        isCreatingThreadRef.current = false;
+      });
+  }, [
+    appendMessages,
+    createGuestChatId,
+    createThread,
+    extractAttachmentsForMessage,
+    guestChatId,
+    isAuthenticated,
+    setActiveThreadId,
+    setGuestChatId,
+    shouldPersistHistory,
+    threadMessagesState,
+  ]);
+
   useEffect(() => {
     if (!shouldPersistHistory) return;
     if (isRunning) return;
@@ -1740,11 +2011,20 @@ const ChatThreadContent = ({
 
     const newMessages = threadMessagesState
       .slice(lastPersistedCountRef.current)
-      .map((message) => ({
-        role: message.role,
-        contentText: extractText(message).trim(),
-      }))
-      .filter((message) => message.contentText.length > 0);
+      .map((message) => {
+        const contentText = extractText(message).trim();
+        const attachments = extractAttachmentsForMessage(message);
+        return {
+          role: message.role,
+          contentText,
+          attachments: attachments.length > 0 ? attachments : undefined,
+        };
+      })
+      .filter(
+        (message) =>
+          message.contentText.length > 0 ||
+          (message.attachments?.length ?? 0) > 0,
+      );
 
     if (newMessages.length === 0) {
       lastPersistedCountRef.current = threadMessagesState.length;
@@ -1789,6 +2069,7 @@ const ChatThreadContent = ({
     shouldPersistHistory,
     createThread,
     createGuestChatId,
+    extractAttachmentsForMessage,
     isRunning,
     lastAssistantStatus,
     lastMessageRole,

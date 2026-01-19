@@ -17,15 +17,15 @@ export const metadata: Metadata = {
 export default function AboutPage() {
   return (
     <div className="min-h-dvh bg-[var(--bg)]">
-      <section className="relative overflow-hidden py-24 lg:py-32">
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-[rgba(255,122,26,0.15)] via-transparent to-transparent opacity-70" />
+      <section className="relative overflow-hidden pt-20 pb-24 lg:pt-32 lg:pb-32">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-[rgba(255,122,26,0.12)] via-transparent to-transparent opacity-80" />
         <Container>
           <div className="relative z-10 grid gap-16 lg:grid-cols-[1.1fr_0.9fr]">
             <div className="flex flex-col justify-center">
-              <div className="inline-flex items-center gap-2 self-start rounded-full border border-[var(--accent)]/30 bg-[var(--accent)]/10 px-4 py-1.5 text-xs font-bold tracking-widest text-[var(--accent)] uppercase shadow-[0_0_15px_-5px_var(--accent)]">
+              <div className="inline-flex items-center gap-2 self-start rounded-full border border-[var(--accent)]/20 bg-[var(--accent)]/5 px-4 py-1.5 text-[10px] font-bold tracking-[0.2em] text-[var(--accent)] uppercase shadow-[0_0_20px_-5px_var(--accent)]/20">
                 AI handyman, built for DIY confidence
               </div>
-              <h1 className="font-display mt-8 text-5xl font-bold tracking-tighter text-white sm:text-6xl lg:text-7xl">
+              <h1 className="font-display mt-8 text-5xl font-semibold tracking-tight text-white sm:text-6xl lg:text-7xl lg:leading-[1.1]">
                 Fixly is your AI handyman for fast, safe DIY repair help.
               </h1>
               <p className="mt-8 max-w-2xl text-lg leading-relaxed text-[var(--muted)] sm:text-xl">
@@ -35,7 +35,7 @@ export default function AboutPage() {
                 problems.
               </p>
 
-              <div className="mt-10 grid gap-4 sm:grid-cols-3">
+              <div className="mt-12 grid gap-4 sm:grid-cols-3">
                 {[
                   "Describe the issue",
                   "Add photo or voice",
@@ -43,17 +43,17 @@ export default function AboutPage() {
                 ].map((step, index) => (
                   <div
                     key={step}
-                    className="group rounded-2xl border border-white/10 bg-white/5 px-5 py-4 text-sm text-white transition-all duration-300 hover:-translate-y-1 hover:bg-white/10 hover:shadow-lg"
+                    className="group rounded-2xl border border-white/5 bg-white/[0.03] px-6 py-5 text-sm text-white transition-all duration-300 hover:-translate-y-1 hover:border-white/10 hover:bg-white/[0.06] hover:shadow-2xl"
                   >
-                    <div className="text-xs font-bold tracking-widest text-[var(--muted)] uppercase group-hover:text-[var(--accent)]">
+                    <div className="text-[10px] font-bold tracking-[0.2em] text-[var(--muted)] uppercase group-hover:text-[var(--accent)] transition-colors">
                       Step {index + 1}
                     </div>
-                    <div className="mt-2 font-semibold">{step}</div>
+                    <div className="mt-2 font-medium text-white/90">{step}</div>
                   </div>
                 ))}
               </div>
 
-              <div className="mt-8 flex flex-wrap gap-3">
+              <div className="mt-10 flex flex-wrap gap-2.5">
                 {[
                   "Save time when a leak starts",
                   "Avoid call-out fees for small jobs",
@@ -61,7 +61,7 @@ export default function AboutPage() {
                 ].map((chip) => (
                   <span
                     key={chip}
-                    className="rounded-full border border-white/10 bg-white/5 px-5 py-2.5 text-xs font-medium text-white/80 transition-colors hover:bg-white/10"
+                    className="rounded-full border border-white/5 bg-white/[0.03] px-5 py-2 text-[13px] font-medium text-white/60 transition-colors hover:border-white/10 hover:text-white/80"
                   >
                     {chip}
                   </span>
@@ -70,40 +70,40 @@ export default function AboutPage() {
             </div>
 
             <div className="relative flex items-center">
-              <div className="absolute -top-12 -right-12 h-64 w-64 rounded-full bg-[var(--accent)]/10 blur-3xl" />
-              <div className="relative w-full rounded-3xl border border-white/10 bg-white/5 p-8 shadow-2xl backdrop-blur-md">
-                <div className="flex items-center gap-3 text-xs font-medium tracking-widest text-[var(--muted)] uppercase">
+              <div className="absolute -top-12 -right-12 h-64 w-64 rounded-full bg-[var(--accent)]/5 blur-[100px]" />
+              <div className="relative w-full rounded-[2.5rem] border border-white/10 bg-white/[0.02] p-8 shadow-2xl backdrop-blur-xl">
+                <div className="flex items-center gap-3 text-[10px] font-bold tracking-[0.2em] text-[var(--muted)] uppercase">
                   <span className="relative flex h-2 w-2">
-                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75"></span>
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400/40 opacity-75"></span>
                     <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500"></span>
                   </span>
                   Repair flow (example)
                 </div>
-                <div className="mt-6 flex flex-col gap-3 rounded-2xl border border-white/10 bg-white/5 p-6 font-sans">
-                  <div className="self-end rounded-2xl rounded-tr-sm bg-white/10 px-4 py-2 text-sm font-medium text-white">
+                <div className="mt-8 flex flex-col gap-4 rounded-3xl border border-white/5 bg-white/[0.03] p-6 font-sans">
+                  <div className="self-end rounded-2xl rounded-tr-sm bg-white/10 px-4 py-2 text-sm font-medium text-white/90">
                     Kitchen sink leak
                   </div>
-                  <div className="self-start rounded-2xl rounded-tl-sm bg-[var(--accent)]/10 px-4 py-3 text-sm text-white">
-                    <div className="mb-2 text-xs font-bold tracking-wider text-[var(--accent)] uppercase">
+                  <div className="self-start rounded-2xl rounded-tl-sm border border-[var(--accent)]/10 bg-[var(--accent)]/[0.03] px-5 py-4 text-sm text-white shadow-[0_0_30px_-10px_var(--accent)]/10">
+                    <div className="mb-3 text-[10px] font-bold tracking-[0.2em] text-[var(--accent)] uppercase">
                       Suggested Fix
                     </div>
-                    <ul className="space-y-2 text-white/80">
-                      <li className="flex gap-2">
-                        <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--accent)]" />
+                    <ul className="space-y-3 text-white/70">
+                      <li className="flex gap-3">
+                        <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--accent)] shadow-[0_0_8px_var(--accent)]" />
                         <span>Check supply line fittings</span>
                       </li>
-                      <li className="flex gap-2">
-                        <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--accent)]" />
+                      <li className="flex gap-3">
+                        <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--accent)] shadow-[0_0_8px_var(--accent)]" />
                         <span>Tighten 1/4 turn, test for drip</span>
                       </li>
-                      <li className="flex gap-2">
-                        <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--accent)]" />
+                      <li className="flex gap-3">
+                        <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--accent)] shadow-[0_0_8px_var(--accent)]" />
                         <span>If still leaking, share a photo</span>
                       </li>
                     </ul>
                   </div>
                 </div>
-                <div className="mt-6 grid gap-4 sm:grid-cols-2">
+                <div className="mt-8 grid gap-3 sm:grid-cols-2">
                   {[
                     {
                       title: "Photo-aware tips",
@@ -124,12 +124,12 @@ export default function AboutPage() {
                   ].map((card) => (
                     <div
                       key={card.title}
-                      className="rounded-xl border border-white/5 bg-white/5 px-4 py-4 text-sm text-white/80 transition-colors hover:bg-white/10"
+                      className="rounded-2xl border border-white/5 bg-white/[0.02] px-5 py-4 text-sm transition-all duration-300 hover:border-white/10 hover:bg-white/[0.05]"
                     >
-                      <div className="font-semibold text-white">
+                      <div className="font-semibold text-white/90">
                         {card.title}
                       </div>
-                      <div className="mt-1 text-xs text-white/50">
+                      <div className="mt-1 text-xs text-white/40 leading-relaxed">
                         {card.copy}
                       </div>
                     </div>
@@ -143,26 +143,26 @@ export default function AboutPage() {
 
       <div className="mx-auto h-px w-full max-w-7xl bg-gradient-to-r from-transparent via-white/10 to-transparent" />
 
-      <section className="py-24">
+      <section className="py-32 lg:py-40">
         <Container>
           <div className="grid gap-16 lg:grid-cols-[0.9fr_1.1fr]">
             <div className="flex flex-col justify-center">
-              <h2 className="font-display text-3xl font-bold tracking-tight text-white sm:text-4xl">
+              <h2 className="font-display text-3xl font-semibold tracking-tight text-white sm:text-4xl lg:text-5xl lg:leading-[1.2]">
                 Built for the moment you need help.
               </h2>
-              <p className="mt-6 text-lg leading-relaxed text-[var(--muted)]">
+              <p className="mt-8 text-lg leading-relaxed text-[var(--muted)]">
                 Fixly exists because small fixes should not cost a fortune.
                 People get stuck on simple repairs, and scheduling a pro can be
                 slow and expensive. We built an AI handyman that helps you make
                 smart, safe decisions with clear steps you can trust.
               </p>
-              <p className="mt-4 text-lg leading-relaxed text-[var(--muted)]">
+              <p className="mt-6 text-lg leading-relaxed text-[var(--muted)]">
                 From plumbing leaks and sticky doors to mounting shelves and
                 fixing drywall, Fixly gives you fast, practical home repair help
                 so you can fix it yourself and keep moving.
               </p>
             </div>
-            <div className="grid gap-6 sm:grid-cols-2">
+            <div className="grid gap-5 sm:grid-cols-2">
               {[
                 "Clarity over guesswork",
                 "Guided DIY repair assistant",
@@ -171,12 +171,12 @@ export default function AboutPage() {
               ].map((value) => (
                 <div
                   key={value}
-                  className="group rounded-3xl border border-white/10 bg-white/5 px-6 py-6 text-sm text-white shadow-xl backdrop-blur-sm transition-all duration-300 hover:-translate-y-1 hover:bg-white/10 hover:shadow-2xl"
+                  className="group rounded-[2rem] border border-white/5 bg-white/[0.02] px-8 py-8 text-sm text-white shadow-xl backdrop-blur-sm transition-all duration-300 hover:-translate-y-1 hover:border-white/10 hover:bg-white/[0.05] hover:shadow-2xl"
                 >
-                  <div className="mb-3 text-xs font-bold tracking-widest text-[var(--muted)] uppercase group-hover:text-[var(--accent)]">
+                  <div className="mb-4 text-[10px] font-bold tracking-[0.2em] text-[var(--muted)] uppercase group-hover:text-[var(--accent)] transition-colors">
                     Promise
                   </div>
-                  <div className="font-semibold text-white">{value}</div>
+                  <div className="text-base font-medium text-white/90 leading-snug">{value}</div>
                 </div>
               ))}
             </div>
@@ -186,60 +186,65 @@ export default function AboutPage() {
 
       <div className="mx-auto h-px w-full max-w-7xl bg-gradient-to-r from-transparent via-white/10 to-transparent" />
 
-      <section className="py-24">
+      <section className="py-32 lg:py-40">
         <Container>
-          <h2 className="font-display text-3xl font-bold tracking-tight text-white sm:text-4xl">
-            Fixly vs calling a handyman
-          </h2>
-          <p className="mt-6 max-w-2xl text-lg text-[var(--muted)]">
-            Fixly is ideal for small and medium repairs, while pros are best for
-            dangerous or complex work. We always call out when to bring in a
-            licensed expert for gas, serious electrical, or major water issues.
-          </p>
+          <div className="max-w-3xl">
+            <h2 className="font-display text-3xl font-semibold tracking-tight text-white sm:text-4xl lg:text-5xl">
+              Fixly vs calling a handyman
+            </h2>
+            <p className="mt-8 text-lg leading-relaxed text-[var(--muted)]">
+              Fixly is ideal for small and medium repairs, while pros are best for
+              dangerous or complex work. We always call out when to bring in a
+              licensed expert for gas, serious electrical, or major water issues.
+            </p>
+          </div>
 
-          <div className="mt-12 grid gap-8 lg:grid-cols-2">
-            <div className="rounded-3xl border border-[var(--accent)]/30 bg-[var(--accent)]/[0.03] p-8 shadow-2xl">
-              <div className="text-lg font-bold text-white">
-                Fixly (AI handyman)
+          <div className="mt-16 grid gap-8 lg:grid-cols-2">
+            <div className="relative overflow-hidden rounded-[2.5rem] border border-[var(--accent)]/20 bg-[var(--accent)]/[0.02] p-10 shadow-2xl transition-all duration-300 hover:border-[var(--accent)]/30">
+              <div className="absolute top-0 right-0 -mt-8 -mr-8 h-32 w-32 rounded-full bg-[var(--accent)]/5 blur-3xl" />
+              <div className="relative z-10">
+                <div className="text-xl font-semibold text-white">
+                  Fixly (AI handyman)
+                </div>
+                <ul className="mt-8 space-y-5 text-[15px] text-white/70">
+                  <li className="flex items-start gap-4">
+                    <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--accent)] shadow-[0_0_8px_var(--accent)]" />
+                    <span>Guided DIY steps with photo and voice support.</span>
+                  </li>
+                  <li className="flex items-start gap-4">
+                    <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--accent)] shadow-[0_0_8px_var(--accent)]" />
+                    <span>
+                      Faster for small repairs like leaks, doors, and mounting.
+                    </span>
+                  </li>
+                  <li className="flex items-start gap-4">
+                    <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--accent)] shadow-[0_0_8px_var(--accent)]" />
+                    <span>Learn skills and fix it yourself with confidence.</span>
+                  </li>
+                  <li className="flex items-start gap-4">
+                    <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--accent)] shadow-[0_0_8px_var(--accent)]" />
+                    <span>Lower cost and no scheduling delays.</span>
+                  </li>
+                </ul>
               </div>
-              <ul className="mt-6 space-y-4 text-sm text-white/80">
-                <li className="flex items-start gap-3">
-                  <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-[var(--accent)]" />
-                  <span>Guided DIY steps with photo and voice support.</span>
-                </li>
-                <li className="flex items-start gap-3">
-                  <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-[var(--accent)]" />
-                  <span>
-                    Faster for small repairs like leaks, doors, and mounting.
-                  </span>
-                </li>
-                <li className="flex items-start gap-3">
-                  <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-[var(--accent)]" />
-                  <span>Learn skills and fix it yourself with confidence.</span>
-                </li>
-                <li className="flex items-start gap-3">
-                  <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-[var(--accent)]" />
-                  <span>Lower cost and no scheduling delays.</span>
-                </li>
-              </ul>
             </div>
-            <div className="rounded-3xl border border-white/10 bg-white/5 p-8 shadow-xl">
-              <div className="text-lg font-bold text-white">Pro handyman</div>
-              <ul className="mt-6 space-y-4 text-sm text-[var(--muted)]">
-                <li className="flex items-start gap-3">
-                  <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-white/20" />
+            <div className="rounded-[2.5rem] border border-white/5 bg-white/[0.02] p-10 shadow-xl transition-all duration-300 hover:border-white/10">
+              <div className="text-xl font-semibold text-white/90">Pro handyman</div>
+              <ul className="mt-8 space-y-5 text-[15px] text-white/40">
+                <li className="flex items-start gap-4">
+                  <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-white/10" />
                   <span>Best for high-risk or complex repairs.</span>
                 </li>
-                <li className="flex items-start gap-3">
-                  <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-white/20" />
+                <li className="flex items-start gap-4">
+                  <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-white/10" />
                   <span>Great for large projects or code-sensitive work.</span>
                 </li>
-                <li className="flex items-start gap-3">
-                  <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-white/20" />
+                <li className="flex items-start gap-4">
+                  <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-white/10" />
                   <span>Higher cost with scheduling lead time.</span>
                 </li>
-                <li className="flex items-start gap-3">
-                  <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-white/20" />
+                <li className="flex items-start gap-4">
+                  <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-white/10" />
                   <span>Ideal when you need licensed, insured service.</span>
                 </li>
               </ul>
@@ -250,19 +255,19 @@ export default function AboutPage() {
 
       <div className="mx-auto h-px w-full max-w-7xl bg-gradient-to-r from-transparent via-white/10 to-transparent" />
 
-      <section className="py-24">
+      <section className="py-32 lg:py-40">
         <Container>
           <div className="flex flex-col items-start md:items-center md:text-center">
-            <h2 className="font-display text-3xl font-bold tracking-tight text-white sm:text-4xl">
+            <h2 className="font-display text-3xl font-semibold tracking-tight text-white sm:text-4xl lg:text-5xl">
               What Fixly can help with
             </h2>
-            <p className="mt-6 max-w-2xl text-lg text-[var(--muted)]">
+            <p className="mt-8 max-w-2xl text-lg leading-relaxed text-[var(--muted)]">
               From quick fixes to routine maintenance, Fixly covers the most
               common DIY repair assistant needs.
             </p>
           </div>
-          <div className="mt-16 rounded-3xl border border-white/10 bg-white/5 p-8 md:p-12">
-            <div className="grid gap-x-12 gap-y-10 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="mt-20 rounded-[3rem] border border-white/5 bg-white/[0.02] p-10 md:p-16 shadow-2xl backdrop-blur-sm">
+            <div className="grid gap-x-16 gap-y-12 sm:grid-cols-2 lg:grid-cols-3">
               {[
                 {
                   title: "Sink leaks",
@@ -313,12 +318,12 @@ export default function AboutPage() {
                   copy: "Draft fixes for doors and windows.",
                 },
               ].map((item) => (
-                <div key={item.title} className="relative pl-6">
-                  <div className="absolute top-2.5 left-0 h-1.5 w-1.5 rounded-full bg-[var(--accent)] shadow-[0_0_8px_var(--accent)]" />
-                  <div className="text-base font-bold text-white">
+                <div key={item.title} className="group relative pl-8">
+                  <div className="absolute top-2.5 left-0 h-1.5 w-1.5 rounded-full bg-[var(--accent)] shadow-[0_0_10px_var(--accent)] transition-transform duration-300 group-hover:scale-125" />
+                  <div className="text-lg font-medium text-white/90">
                     {item.title}
                   </div>
-                  <div className="mt-2 text-sm leading-relaxed text-[var(--muted)]">
+                  <div className="mt-3 text-[15px] leading-relaxed text-[var(--muted)]">
                     {item.copy}
                   </div>
                 </div>
@@ -330,25 +335,25 @@ export default function AboutPage() {
 
       <div className="mx-auto h-px w-full max-w-7xl bg-gradient-to-r from-transparent via-white/10 to-transparent" />
 
-      <section className="py-24">
+      <section className="py-32 lg:py-40">
         <Container>
-          <div className="rounded-3xl border border-white/10 bg-white/5 p-8 shadow-xl backdrop-blur-sm md:p-12">
-            <h2 className="font-display text-2xl font-bold tracking-tight text-white sm:text-3xl">
+          <div className="rounded-[2.5rem] border border-white/5 bg-white/[0.02] p-10 shadow-xl backdrop-blur-sm md:p-16">
+            <h2 className="font-display text-2xl font-semibold tracking-tight text-white sm:text-3xl lg:text-4xl">
               How Fixly stays safe
             </h2>
-            <ul className="mt-6 space-y-3 text-base leading-relaxed text-[var(--muted)]">
-              <li className="flex items-start gap-3">
-                <span className="mt-2 h-1.5 w-1.5 rounded-full bg-[var(--accent)]" />
+            <ul className="mt-10 space-y-5 text-lg leading-relaxed text-[var(--muted)]">
+              <li className="flex items-start gap-4">
+                <span className="mt-2.5 h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--accent)] shadow-[0_0_8px_var(--accent)]" />
                 <span>Warns you about hazards and risky steps.</span>
               </li>
-              <li className="flex items-start gap-3">
-                <span className="mt-2 h-1.5 w-1.5 rounded-full bg-[var(--accent)]" />
+              <li className="flex items-start gap-4">
+                <span className="mt-2.5 h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--accent)] shadow-[0_0_8px_var(--accent)]" />
                 <span>
                   Suggests shutting off water or breakers when appropriate.
                 </span>
               </li>
-              <li className="flex items-start gap-3">
-                <span className="mt-2 h-1.5 w-1.5 rounded-full bg-[var(--accent)]" />
+              <li className="flex items-start gap-4">
+                <span className="mt-2.5 h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--accent)] shadow-[0_0_8px_var(--accent)]" />
                 <span>
                   Encourages pros for gas, serious electrical, or structural
                   work.
@@ -359,30 +364,30 @@ export default function AboutPage() {
         </Container>
       </section>
 
-      <section className="pb-24">
+      <section className="pb-32 lg:pb-40">
         <Container>
-          <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-white/5 px-8 py-16 text-center shadow-2xl backdrop-blur-sm md:px-16">
-            <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-[var(--accent)]/10 to-transparent opacity-50" />
+          <div className="relative overflow-hidden rounded-[3rem] border border-white/10 bg-white/[0.02] px-8 py-20 text-center shadow-2xl backdrop-blur-sm md:px-16 lg:py-28">
+            <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-[var(--accent)]/10 to-transparent opacity-40" />
             <div className="relative z-10">
-              <h2 className="font-display text-3xl font-bold tracking-tight text-white sm:text-4xl">
+              <h2 className="font-display text-3xl font-semibold tracking-tight text-white sm:text-4xl lg:text-5xl">
                 Ready to fix it yourself?
               </h2>
-              <p className="mx-auto mt-6 max-w-xl text-lg text-[var(--muted)]">
+              <p className="mx-auto mt-8 max-w-xl text-lg leading-relaxed text-[var(--muted)]">
                 Start a chat with your AI handyman and get your repair done with
                 confidence.
               </p>
-              <div className="mt-10 flex flex-wrap justify-center gap-4">
+              <div className="mt-12 flex flex-wrap justify-center gap-4">
                 <Link
                   href="/"
-                  className="inline-flex items-center justify-center rounded-full bg-[var(--accent)] px-8 py-4 text-sm font-semibold text-black shadow-[0_0_20px_-5px_var(--accent)] transition-all duration-200 hover:scale-[1.02] hover:bg-[var(--accent)]/90 hover:shadow-[0_0_25px_-5px_var(--accent)] active:scale-[0.98]"
+                  className="inline-flex items-center justify-center rounded-full bg-[var(--accent)] px-10 py-4 text-[15px] font-bold text-black shadow-[0_0_30px_-5px_var(--accent)]/40 transition-all duration-300 hover:scale-[1.02] hover:bg-[var(--accent)]/90 hover:shadow-[0_0_40px_-5px_var(--accent)]/50 active:scale-[0.98]"
                 >
-                  Start a chat now
+                  Explore the experience
                 </Link>
                 <Link
                   href="/pricing"
-                  className="inline-flex items-center justify-center rounded-full border border-white/10 bg-white/5 px-8 py-4 text-sm font-semibold text-white transition-all duration-200 hover:scale-[1.02] hover:bg-white/10 active:scale-[0.98]"
+                  className="inline-flex items-center justify-center rounded-full border border-white/10 bg-white/[0.05] px-10 py-4 text-[15px] font-bold text-white transition-all duration-300 hover:scale-[1.02] hover:bg-white/10 active:scale-[0.98]"
                 >
-                  View pricing
+                  See how Fixly helps
                 </Link>
               </div>
             </div>

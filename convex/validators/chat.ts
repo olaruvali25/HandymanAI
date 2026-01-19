@@ -7,11 +7,12 @@ export const chatMessageRoleValidator = v.union(
 );
 export type ChatMessageRole = Infer<typeof chatMessageRoleValidator>;
 
-// Attachments are currently limited to inline image payloads (data:image/* URLs).
 export const chatAttachmentValidator = v.object({
   name: v.string(),
   type: v.string(),
-  dataUrl: v.string(),
   size: v.number(),
+  storageId: v.optional(v.id("_storage")),
+  url: v.optional(v.string()),
+  dataUrl: v.optional(v.string()),
 });
 export type ChatAttachment = Infer<typeof chatAttachmentValidator>;

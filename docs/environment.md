@@ -159,3 +159,21 @@ deployment runtime (not from `.env.local`).
 - Add your checks/usages inside `convex/*.ts`
 - Document it in `docs/environment.md`
 - Set it with `npx convex env set YOUR_VAR value`
+
+## Stripe payments (Convex + Next.js)
+
+Stripe webhooks and checkout sessions run in Convex Actions, so Stripe secrets
+must be set in Convex env (not only `.env.local`).
+
+### Required Convex env vars
+
+- `STRIPE_KEY` — Stripe secret key (`sk_...`)
+- `STRIPE_WEBHOOK_SECRET` — Webhook secret from `stripe listen`
+- `HOST_URL` — Your site origin (e.g. `http://localhost:3000`)
+- `STRIPE_PLAN_PRICE_IDS` — JSON mapping of plan -> price ID
+  - Example: `{"starter":"price_...","plus":"price_...","pro":"price_..."}`
+- `STRIPE_TOPUP_PRICE_ID` — Price ID for $5 / 100 credits (one-time)
+
+### Next.js env vars
+
+- `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` (optional for Stripe client UI)

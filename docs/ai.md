@@ -35,12 +35,13 @@ To disable streaming (useful for debugging clients), set:
 
 ## Attachments (images)
 
-`/api/ai` accepts images as `data:image/*` URLs.
+`/api/ai` accepts images as uploaded references (storage IDs + URLs).
 
-- JSON mode: `attachments: [{ name, type, dataUrl, size }]`
-- Multipart mode: supports `multipart/form-data` with files
+- JSON mode: `attachments: [{ name, type, size, storageId?, url?, dataUrl? }]`
+- Upload flow: client uploads to Convex Storage, then sends `storageId` (and optionally `url`)
+- Multipart uploads are no longer used for images; clients should upload to storage first.
 
-The UI currently sends attachments from `src/components/chat/GrokThread.tsx`.
+The UI uploads attachments in `src/components/chat/GrokThread.tsx`.
 
 ## Credits / entitlements (server-enforced)
 
@@ -48,14 +49,13 @@ The UI currently sends attachments from `src/components/chat/GrokThread.tsx`.
 
 Current costs (from `src/app/api/ai/route.ts`):
 
-- User message: `1` credit
-- User message with image(s): `1 + 15` credits
+- User message: `2` credits
+- User message with image(s): `2 + 15` credits
 - Assistant reply: `2` credits
-- Assistant reply when images were included: `2 + 5` credits
 
 If credits are insufficient:
 
-- Returns HTTP `402` with `{ "error": "INSUFFICIENT_CREDITS" }`
+- Returns HTTP `402` with `{ "error": "INSUFFICIENT_CREDITS", "assistantMessage": "...", "actions": {...} }`
 
 Credits are tracked in Convex (`convex/entitlements.ts` + `convex/schema.ts`).
 

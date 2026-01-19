@@ -40,6 +40,9 @@ const MAX_MESSAGE_LENGTH = 2000;
 const MAX_TOTAL_CHARS = 12000;
 const IS_DEV = process.env.NODE_ENV === "development";
 const STREAMING_DISABLED = process.env.FIXLY_DISABLE_STREAMING === "1";
+const USER_MESSAGE_COST = 2;
+const IMAGE_SURCHARGE_COST = 15;
+const ASSISTANT_REPLY_COST = 2;
 
 const CACHE_MAX_ENTRIES = 1000;
 const CACHE_TTL_MS = 1000 * 60 * 60 * 6;
@@ -168,22 +171,86 @@ const sanitizeAttachments = (attachments?: AiRequestBody["attachments"]) => {
   };
 
   return attachments.flatMap((attachment) => {
-    if (!attachment || typeof attachment.dataUrl !== "string") return [];
-    if (!attachment.dataUrl.startsWith("data:image/")) return [];
+    if (!attachment || typeof attachment !== "object") return [];
+    const name = attachment.name ?? "upload";
+    const type = attachment.type ?? "";
+    const size =
+      typeof attachment.size === "number" && attachment.size > 0
+        ? attachment.size
+        : null;
+    const url = typeof attachment.url === "string" ? attachment.url : null;
+    const storageId =
+      typeof attachment.storageId === "string" ? attachment.storageId : null;
+    const dataUrl =
+      typeof attachment.dataUrl === "string" ? attachment.dataUrl : null;
 
-    const size = getDataUrlSizeBytes(attachment.dataUrl);
-    if (typeof size !== "number" || size <= 0) return [];
-    if (size > CHAT_MAX_IMAGE_ATTACHMENT_BYTES) return [];
+    if (url) {
+      return [
+        {
+          name,
+          type,
+          url,
+          storageId: storageId ?? undefined,
+          size: size ?? 0,
+        },
+      ];
+    }
 
-    return [
-      {
-        name: attachment.name ?? "upload",
-        type: attachment.type ?? "",
-        dataUrl: attachment.dataUrl,
-        size,
-      },
-    ];
+    if (dataUrl && dataUrl.startsWith("data:image/")) {
+      const dataSize = getDataUrlSizeBytes(dataUrl);
+      const resolvedSize = size ?? dataSize;
+      if (typeof resolvedSize !== "number" || resolvedSize <= 0) return [];
+      if (resolvedSize > CHAT_MAX_IMAGE_ATTACHMENT_BYTES) return [];
+      return [
+        {
+          name,
+          type,
+          dataUrl,
+          storageId: storageId ?? undefined,
+          size: resolvedSize,
+        },
+      ];
+    }
+
+    if (storageId) {
+      return [
+        {
+          name,
+          type,
+          storageId,
+          size: size ?? 0,
+        },
+      ];
+    }
+
+    return [];
   });
+};
+
+const resolveAttachmentUrls = async (
+  attachments: ReturnType<typeof sanitizeAttachments>,
+  token: string | null,
+) => {
+  if (attachments.length === 0) return attachments;
+  const resolved = await Promise.all(
+    attachments.map(async (attachment) => {
+      if (attachment.url || !attachment.storageId) return attachment;
+      try {
+        const result = await fetchQuery(
+          creditsApi.attachments.getAttachmentUrl,
+          { storageId: attachment.storageId },
+          token ? { token } : {},
+        );
+        if (result?.url) {
+          return { ...attachment, url: result.url };
+        }
+      } catch {
+        return attachment;
+      }
+      return attachment;
+    }),
+  );
+  return resolved.filter((attachment) => attachment.url || attachment.dataUrl);
 };
 
 const filesToAttachments = async (files: File[]) => {
@@ -274,7 +341,7 @@ const buildTurnId = (
       name: attachment.name,
       type: attachment.type,
       size: attachment.size,
-      digest: attachment.dataUrl.slice(0, 80),
+      digest: (attachment.url ?? attachment.dataUrl ?? attachment.storageId ?? "").slice(0, 80),
     })),
   });
   return createHash("sha256").update(payload).digest("hex");
@@ -319,13 +386,19 @@ type ReserveCreditsMutation = FunctionReference<
     turnId: string;
     cost: number;
     minimumCredits?: number;
+    threadId?: string;
   },
   { credits: number }
 >;
 type ChargeCreditsMutation = FunctionReference<
   "mutation",
   "public",
-  { anonymousId?: string; turnId: string; cost: number },
+  {
+    anonymousId?: string;
+    turnId: string;
+    cost: number;
+    threadId?: string;
+  },
   { credits: number }
 >;
 
@@ -334,6 +407,20 @@ const creditsApi = api as unknown as {
     getCreditsForActor: GetCreditsQuery;
     reserveCredits: ReserveCreditsMutation;
     chargeAssistantCredits: ChargeCreditsMutation;
+    recordOutOfCredits: FunctionReference<
+      "mutation",
+      "public",
+      { anonymousId?: string; turnId: string; threadId?: string },
+      { recorded: boolean }
+    >;
+  };
+  attachments: {
+    getAttachmentUrl: FunctionReference<
+      "query",
+      "public",
+      { storageId: string },
+      { url: string | null }
+    >;
   };
 };
 
@@ -449,13 +536,17 @@ export async function POST(req: Request) {
     }
   }
 
-  const attachments =
-    attachmentsFromForm.length > 0
-      ? sanitizeAttachments(attachmentsFromForm)
-      : sanitizeAttachments(body?.attachments);
+  if (attachmentsFromForm.length > 0) {
+    return NextResponse.json(
+      { error: "Invalid form data." },
+      { status: 400 },
+    );
+  }
+
+  const rawAttachments = sanitizeAttachments(body?.attachments);
 
   const validationError = body
-    ? validatePayload(body, attachments.length > 0)
+    ? validatePayload(body, rawAttachments.length > 0)
     : "Invalid payload.";
   if (validationError) {
     return NextResponse.json({ error: validationError }, { status: 400 });
@@ -479,9 +570,10 @@ export async function POST(req: Request) {
     );
   }
 
+  const attachments = await resolveAttachmentUrls(rawAttachments, token);
   const hasImageAttachments = attachments.length > 0;
-  const userCost = 1 + (hasImageAttachments ? 15 : 0);
-  const assistantCost = 2 + (hasImageAttachments ? 5 : 0);
+  const userCost = USER_MESSAGE_COST + (hasImageAttachments ? IMAGE_SURCHARGE_COST : 0);
+  const assistantCost = ASSISTANT_REPLY_COST;
   const turnId = buildTurnId(body.messages, attachments);
 
   let creditsRemaining = 0;
@@ -494,6 +586,7 @@ export async function POST(req: Request) {
           turnId,
           cost: userCost,
           minimumCredits: userCost + assistantCost,
+          threadId: body.threadId,
         },
         token ? { token } : {},
       ),
@@ -502,8 +595,73 @@ export async function POST(req: Request) {
   } catch (error) {
     const message = error instanceof Error ? error.message : "";
     if (message === "INSUFFICIENT_CREDITS") {
+      try {
+        await fetchMutation(
+          creditsApi.entitlements.recordOutOfCredits,
+          {
+            anonymousId: anonymousId ?? undefined,
+            turnId,
+            threadId: body.threadId,
+          },
+          token ? { token } : {},
+        );
+      } catch {}
+
+      let plan: string | null = null;
+      if (token) {
+        try {
+          const me = await fetchQuery(
+            api.users.me,
+            {},
+            token ? { token } : {},
+          );
+          plan = typeof me?.plan === "string" ? me.plan : null;
+        } catch {
+          plan = null;
+        }
+      }
+
+      const userHasPlan = plan && plan !== "none";
+      const assistantMessage = !userHasAccount
+        ? "You need to log in or create an account to continue."
+        : plan === "none"
+          ? "Grab some credits and lets finish this."
+          : "Add extra credits or upgrade to finish.";
+
+      const actions = !userHasAccount
+        ? {
+            actions: [
+              { type: "link", label: "Login", href: "/login" },
+              { type: "link", label: "Signup", href: "/signup" },
+            ],
+          }
+        : {
+            actions: [
+              {
+                type: "link",
+                label: "Go to Pricing",
+                href: "/pricing",
+              },
+            ],
+          };
+
+      const creditsResponse = await fetchQuery(
+        creditsApi.entitlements.getCreditsForActor,
+        { anonymousId: anonymousId ?? undefined },
+        token ? { token } : {},
+      );
+      const entitlements = buildClientEntitlements({
+        userHasAccount,
+        credits: creditsResponse?.credits ?? 0,
+      });
+
       const res = NextResponse.json(
-        { error: "INSUFFICIENT_CREDITS" },
+        {
+          error: "INSUFFICIENT_CREDITS",
+          entitlements,
+          actions,
+          assistantMessage,
+        },
         { status: 402 },
       );
       if (anonymousId && (!fromCookie || shouldSetAnonCookie)) {
@@ -660,7 +818,7 @@ export async function POST(req: Request) {
         { type: "input_text", text: primaryInput },
         ...attachments.map((attachment) => ({
           type: "input_image" as const,
-          image_url: attachment.dataUrl,
+          image_url: attachment.url ?? attachment.dataUrl ?? "",
           detail: "auto" as const,
         })),
       ];
@@ -684,6 +842,7 @@ export async function POST(req: Request) {
               anonymousId: anonymousId ?? undefined,
               turnId,
               cost: assistantCost,
+              threadId: body.threadId,
             },
             token ? { token } : {},
           ),
@@ -792,11 +951,11 @@ export async function POST(req: Request) {
           | { type: "input_image"; image_url: string; detail: "auto" }
         > = [
           { type: "input_text", text: primaryInput },
-          ...attachments.map((attachment) => ({
-            type: "input_image" as const,
-            image_url: attachment.dataUrl,
-            detail: "auto" as const,
-          })),
+        ...attachments.map((attachment) => ({
+          type: "input_image" as const,
+          image_url: attachment.url ?? attachment.dataUrl ?? "",
+          detail: "auto" as const,
+        })),
         ];
 
         const primaryStream = await openai.responses.create({
@@ -830,6 +989,7 @@ export async function POST(req: Request) {
                     anonymousId: anonymousId ?? undefined,
                     turnId,
                     cost: assistantCost,
+                    threadId: body.threadId,
                   },
                   token ? { token } : {},
                 ),

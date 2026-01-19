@@ -8,12 +8,17 @@
  * @module
  */
 
+import type * as attachments from "../attachments.js";
 import type * as auth from "../auth.js";
+import type * as billingConfig from "../billingConfig.js";
 import type * as chatHistory from "../chatHistory.js";
+import type * as creditLedger from "../creditLedger.js";
 import type * as credits from "../credits.js";
+import type * as crons from "../crons.js";
 import type * as entitlements from "../entitlements.js";
 import type * as http from "../http.js";
 import type * as plans from "../plans.js";
+import type * as stripe from "../stripe.js";
 import type * as tasks from "../tasks.js";
 import type * as users from "../users.js";
 import type * as validators_chat from "../validators/chat.js";
@@ -25,12 +30,17 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  attachments: typeof attachments;
   auth: typeof auth;
+  billingConfig: typeof billingConfig;
   chatHistory: typeof chatHistory;
+  creditLedger: typeof creditLedger;
   credits: typeof credits;
+  crons: typeof crons;
   entitlements: typeof entitlements;
   http: typeof http;
   plans: typeof plans;
+  stripe: typeof stripe;
   tasks: typeof tasks;
   users: typeof users;
   "validators/chat": typeof validators_chat;

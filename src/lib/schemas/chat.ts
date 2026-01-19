@@ -8,7 +8,11 @@ export type ChatMessageRole = z.infer<typeof ChatMessageRoleSchema>;
 export const ChatAttachmentSchema = z.object({
   name: z.string().min(1).max(200),
   type: z.string().min(1).max(100),
-  dataUrl: z.string().startsWith("data:image/"),
   size: z.number().int().nonnegative().max(CHAT_MAX_IMAGE_ATTACHMENT_BYTES),
+  storageId: z.string().optional(),
+  url: z.string().url().optional(),
+  dataUrl: z.string().startsWith("data:image/").optional(),
+}).refine((value) => Boolean(value.dataUrl || value.url || value.storageId), {
+  message: "Attachment must include dataUrl, url, or storageId.",
 });
 export type ChatAttachment = z.infer<typeof ChatAttachmentSchema>;

@@ -30,6 +30,13 @@ Fields:
 - `updatedAt?`: number
 - `lastPlanCreditGrantAt?`: number
 - `lastPlanCreditGrantPeriodKey?`: string
+- `lastFreeGrantAt?`: number
+- `loginBonusGrantedAt?`: number
+- `currentPeriodStart?`: number
+- `currentPeriodEnd?`: number
+- `billingAnchor?`: number
+- `nextRenewalAt?`: number
+- `pendingDowngradePlan?`: "none" | "starter" | "plus" | "pro"
 - `stripeCustomerId?`: string
 - `stripeSubscriptionId?`: string
 - `stripeSubscriptionStatus?`: string
@@ -40,6 +47,8 @@ Indexes:
 
 - `email`: (`email`)
 - `phone`: (`phone`)
+- `by_plan`: (`plan`)
+- `by_stripeCustomerId`: (`stripeCustomerId`)
 
 ## anonymousUsers
 
@@ -97,7 +106,7 @@ Fields:
 - `guestChatId?`: string
 - `role`: "user" | "assistant" | "system"
 - `contentText`: string
-- `attachments?`: { name: string; type: string; dataUrl: string; size: number }[]
+- `attachments?`: { name: string; type: string; size: number; storageId?: Id<"_storage">; url?: string; dataUrl?: string }[]
 - `createdAt`: number
 
 Indexes:
@@ -138,3 +147,26 @@ Indexes:
 
 - `by_user_type_period`: (`userId`, `type`, `periodKey`)
 - `by_event`: (`eventId`)
+
+## creditLedger
+
+Fields:
+
+- `actorType`: "user" | "anonymous"
+- `userId?`: Id<"users">
+- `anonymousId?`: string
+- `kind`: "anon_initial_20" | "login_bonus_10" | "free_48h_15" | "plan_reset" | "plan_upgrade_add" | "plan_renewal_reset" | "topup_add" | "chat_user_send" | "chat_assistant_reply" | "out_of_credits_block"
+- `amount`: number
+- `balanceAfter`: number
+- `stripeEventId?`: string
+- `threadId?`: Id<"chatThreads">
+- `turnId?`: string
+- `createdAt`: number
+
+Indexes:
+
+- `by_user_createdAt`: (`userId`, `createdAt`)
+- `by_anonymous_createdAt`: (`anonymousId`, `createdAt`)
+- `by_stripeEventId`: (`stripeEventId`)
+- `by_user_turn_kind`: (`userId`, `turnId`, `kind`)
+- `by_anonymous_turn_kind`: (`anonymousId`, `turnId`, `kind`)

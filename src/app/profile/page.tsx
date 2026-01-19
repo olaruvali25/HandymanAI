@@ -1,10 +1,11 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
-import { useConvexAuth } from "convex/react";
+import { useAction, useConvexAuth } from "convex/react";
 import { useUser } from "@/lib/useUser";
 import { useEntitlementsQuery } from "@/lib/queries/entitlements";
+import { api } from "@convex/_generated/api";
 import Container from "@/components/Container";
 import { Button } from "@/components/ui/button";
 import {
@@ -36,9 +37,35 @@ export default function ProfilePage() {
   const { isAuthenticated, isLoading } = useConvexAuth();
   const { user } = useUser();
   const { data: entitlements } = useEntitlementsQuery();
+  const createPortalSession = useAction(
+    api.stripe.createCustomerPortalSession,
+  );
+  const [isManagingBilling, setIsManagingBilling] = useState(false);
 
   const createdAt = useMemo(() => formatDate(user?._creationTime), [user]);
   const invoices: Invoice[] = [];
+  const hasStripeCustomer = Boolean(user?.stripeCustomerId);
+
+  const handleManageBilling = async () => {
+    if (isManagingBilling) return;
+    setIsManagingBilling(true);
+    try {
+      if (!hasStripeCustomer) {
+        window.location.href = "/pricing";
+        return;
+      }
+      const url = await createPortalSession({});
+      if (url) {
+        window.location.href = url;
+        return;
+      }
+      window.location.href = "/pricing";
+    } catch {
+      window.location.href = "/pricing";
+    } finally {
+      setIsManagingBilling(false);
+    }
+  };
 
   if (!isLoading && !isAuthenticated) {
     return (
@@ -110,8 +137,12 @@ export default function ProfilePage() {
                   <span>No active plan</span>
                 </div>
                 <div className="flex flex-wrap gap-3">
-                  <Button asChild className="bg-[var(--accent)] text-black">
-                    <Link href="/pricing">Manage billing</Link>
+                  <Button
+                    className="bg-[var(--accent)] text-black"
+                    onClick={handleManageBilling}
+                    disabled={isManagingBilling}
+                  >
+                    Manage billing
                   </Button>
                   <Button asChild variant="outline">
                     <Link href="/pricing">View pricing</Link>
@@ -176,8 +207,12 @@ export default function ProfilePage() {
                     plan.
                   </div>
                 )}
-                <Button asChild className="bg-[var(--accent)] text-black">
-                  <Link href="/pricing">Manage billing</Link>
+                <Button
+                  className="bg-[var(--accent)] text-black"
+                  onClick={handleManageBilling}
+                  disabled={isManagingBilling}
+                >
+                  Manage billing
                 </Button>
               </CardContent>
             </Card>

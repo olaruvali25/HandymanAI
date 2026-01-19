@@ -115,13 +115,27 @@ export default function SignupPage() {
                     );
                     return;
                   }
+                  const trimmedName = name.trim();
+                  const trimmedEmail = email.trim();
+                  const hasNumber = /\d/.test(password);
+                  const hasSpecial = /[^A-Za-z0-9]/.test(password);
+                  if (
+                    !trimmedName ||
+                    !trimmedEmail ||
+                    password.length < 8 ||
+                    !hasNumber ||
+                    !hasSpecial
+                  ) {
+                    setError("Sign up failed. Please check your details.");
+                    return;
+                  }
                   setIsSubmitting(true);
                   try {
                     await signOut();
                     const result = await signIn("password", {
                       flow: "signUp",
-                      name,
-                      email,
+                      name: trimmedName,
+                      email: trimmedEmail,
                       password,
                       redirectTo: returnTo,
                     });

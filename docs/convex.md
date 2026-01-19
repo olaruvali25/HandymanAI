@@ -14,7 +14,8 @@ From `convex/schema.ts`:
 - `anonymousUsers` — guest identities + credits, later merged into a user
 - `tasks` — demo CRUD feature (protected route)
 - `chatThreads` / `chatMessages` — chat history persistence for users and guests
-- `creditCharges` / `creditGrants` — credit ledger (usage + grants)
+- `creditCharges` / `creditGrants` — legacy usage + grant tables (still retained)
+- `creditLedger` — canonical credit ledger for all credit mutations
 
 Auth tables are included via `authTables` from `@convex-dev/auth/server`.
 
@@ -31,7 +32,7 @@ For an authoritative list of tables + field types + indexes, see:
   - Requires `CONVEX_SITE_URL` in Convex env (used as auth provider domain)
 
 - `convex/entitlements.ts`
-  - Credits system (reserve + charge) and guest → user merge logic
+  - Credits system (reserve + charge), out-of-credits logging, guest → user merge logic
 
 - `convex/chatHistory.ts`
   - Thread + message persistence and guest → user merge logic
@@ -39,8 +40,17 @@ For an authoritative list of tables + field types + indexes, see:
 - `convex/tasks.ts`
   - Demo task list mutations/queries for authenticated users
 
-- `convex/credits.ts` + `convex/plans.ts`
-  - Plan enums + credit grant helpers (includes dev/admin helpers)
+- `convex/credits.ts` + `convex/billingConfig.ts` (+ `convex/plans.ts` re-export)
+  - Canonical plan + credit config, Stripe-driven credit mutations, free-credit cron
+
+- `convex/stripe.ts`
+  - Stripe checkout + webhook handling (plan lifecycle + top-ups)
+
+- `convex/attachments.ts`
+  - Storage upload URLs + attachment URL resolution
+
+- `convex/crons.ts`
+  - Scheduled free-credit grants for logged-in users with no plan
 
 - `convex/users.ts`
   - `users.me` plus admin/dev plan normalization helpers

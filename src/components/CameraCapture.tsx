@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 
 type CapturePayload = {
@@ -135,10 +136,13 @@ export default function CameraCapture({
 
         {lastCapture ? (
           <div className="absolute top-4 left-4 overflow-hidden rounded-xl border border-white/20 bg-black/40">
-            <img
+            <Image
               src={lastCapture}
               alt="Last capture"
+              width={80}
+              height={80}
               className="h-20 w-20 object-cover"
+              unoptimized
             />
           </div>
         ) : null}

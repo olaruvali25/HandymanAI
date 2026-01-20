@@ -3,6 +3,7 @@ import path from "path";
 import { readFile } from "fs/promises";
 import { fetchMutation, fetchQuery } from "convex/nextjs";
 import { api } from "@convex/_generated/api";
+import type { Id } from "@convex/_generated/dataModel";
 import { getOpenAIClient } from "@/lib/openai";
 import { env } from "@/env";
 import {
@@ -164,6 +165,12 @@ type SanitizedAttachment = {
   storageId?: string;
   url?: string;
   dataUrl?: string;
+};
+
+type ActionItem = {
+  type: "link";
+  label: string;
+  href: string;
 };
 
 const sanitizeAttachments = (
@@ -342,6 +349,43 @@ const getAnonymousId = (req: Request, body: AiRequestBody | null) => {
   const fromBody = body?.anonymousId ?? body?.guestChatId ?? null;
   const fromCookie = cookies[ANON_COOKIE] ?? null;
   return { fromBody, fromCookie };
+};
+
+const buildOutOfCreditsPayload = ({
+  userHasAccount,
+  plan,
+}: {
+  userHasAccount: boolean;
+  plan: string | null;
+}) => {
+  if (!userHasAccount) {
+    return {
+      assistantMessage:
+        "We can fix this, but first you need to log in or create an account.",
+      actions: [
+        { type: "link", label: "Login", href: "/login" },
+        { type: "link", label: "Sign up", href: "/signup" },
+      ] satisfies ActionItem[],
+    };
+  }
+
+  if (!plan || plan === "none") {
+    return {
+      assistantMessage:
+        "Were almost there. Grab some credits and lets finish this.",
+      actions: [
+        { type: "link", label: "Go to pricing", href: "/pricing" },
+      ] satisfies ActionItem[],
+    };
+  }
+
+  return {
+    assistantMessage:
+      "This is the final stretch. Add a few credits or upgrade to keep going.",
+    actions: [
+      { type: "link", label: "Go to pricing", href: "/pricing" },
+    ] satisfies ActionItem[],
+  };
 };
 
 const buildTurnId = (
@@ -595,6 +639,103 @@ export async function POST(req: Request) {
   const assistantCost = ASSISTANT_REPLY_COST;
   const turnId = buildTurnId(body.messages, attachments);
 
+  let currentCredits = 0;
+  try {
+    const creditsSnapshot = await withTimeout(
+      fetchQuery(
+        creditsApi.entitlements.getCreditsForActor,
+        { anonymousId: anonymousId ?? undefined },
+        token ? { token } : {},
+      ),
+    );
+    currentCredits = creditsSnapshot?.credits ?? 0;
+  } catch (error) {
+    console.error("[ai] credits snapshot error:", error);
+  }
+
+  const requiredCredits = userCost + assistantCost;
+  if (currentCredits < requiredCredits) {
+    let plan: string | null = null;
+    if (token) {
+      try {
+        const me = await fetchQuery(api.users.me, {}, token ? { token } : {});
+        plan = typeof me?.plan === "string" ? me.plan : null;
+      } catch {
+        plan = null;
+      }
+    }
+
+    const { assistantMessage, actions } = buildOutOfCreditsPayload({
+      userHasAccount,
+      plan,
+    });
+
+    try {
+      await fetchMutation(
+        creditsApi.entitlements.recordOutOfCredits,
+        {
+          anonymousId: anonymousId ?? undefined,
+          turnId,
+          threadId: body.threadId,
+        },
+        token ? { token } : {},
+      );
+    } catch {}
+
+    if (body.threadId) {
+      try {
+        await fetchMutation(
+          api.chatHistory.appendAssistantMessage,
+          {
+            threadId: body.threadId as Id<"chatThreads">,
+            anonymousId: anonymousId ?? undefined,
+            contentText: assistantMessage,
+          },
+          token ? { token } : {},
+        );
+      } catch {}
+    }
+
+    const entitlements = buildClientEntitlements({
+      userHasAccount,
+      credits: currentCredits,
+    });
+
+    const encoder = new TextEncoder();
+    const headers = new Headers({
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache, no-transform",
+      Connection: "keep-alive",
+    });
+    headers.set("X-User-Has-Account", userHasAccount ? "1" : "0");
+    headers.set("X-Credits", String(currentCredits));
+    if (anonymousId && (!fromCookie || shouldSetAnonCookie)) {
+      headers.append("Set-Cookie", buildCookieHeader(ANON_COOKIE, anonymousId));
+    }
+
+    const stream = new ReadableStream({
+      start(controller) {
+        const sendEvent = (event: string, data: object) => {
+          controller.enqueue(
+            encoder.encode(
+              `event: ${event}\n` + `data: ${JSON.stringify(data)}\n\n`,
+            ),
+          );
+        };
+
+        sendEvent("meta", { entitlements });
+        if (actions.length > 0) {
+          sendEvent("actions", { actions });
+        }
+        sendEvent("delta", { text: assistantMessage });
+        sendEvent("done", {});
+        controller.close();
+      },
+    });
+
+    return new Response(stream, { headers });
+  }
+
   let creditsRemaining = 0;
   try {
     const reserve = await withTimeout(
@@ -613,91 +754,89 @@ export async function POST(req: Request) {
     creditsRemaining = reserve?.credits ?? 0;
   } catch (error) {
     const message = error instanceof Error ? error.message : "";
-    if (message === "INSUFFICIENT_CREDITS") {
+    if (message !== "INSUFFICIENT_CREDITS") {
+      console.error("[ai] credits reserve error:", error);
+    }
+
+    let plan: string | null = null;
+    if (token) {
+      try {
+        const me = await fetchQuery(api.users.me, {}, token ? { token } : {});
+        plan = typeof me?.plan === "string" ? me.plan : null;
+      } catch {
+        plan = null;
+      }
+    }
+
+    const { assistantMessage, actions } = buildOutOfCreditsPayload({
+      userHasAccount,
+      plan,
+    });
+
+    try {
+      await fetchMutation(
+        creditsApi.entitlements.recordOutOfCredits,
+        {
+          anonymousId: anonymousId ?? undefined,
+          turnId,
+          threadId: body.threadId,
+        },
+        token ? { token } : {},
+      );
+    } catch {}
+
+    if (body.threadId) {
       try {
         await fetchMutation(
-          creditsApi.entitlements.recordOutOfCredits,
+          api.chatHistory.appendAssistantMessage,
           {
+            threadId: body.threadId as Id<"chatThreads">,
             anonymousId: anonymousId ?? undefined,
-            turnId,
-            threadId: body.threadId,
+            contentText: assistantMessage,
           },
           token ? { token } : {},
         );
       } catch {}
-
-      let plan: string | null = null;
-      if (token) {
-        try {
-          const me = await fetchQuery(api.users.me, {}, token ? { token } : {});
-          plan = typeof me?.plan === "string" ? me.plan : null;
-        } catch {
-          plan = null;
-        }
-      }
-
-      const assistantMessage = !userHasAccount
-        ? "You need to log in or create an account to continue."
-        : plan === "none"
-          ? "Grab some credits and lets finish this."
-          : "Add extra credits or upgrade to finish.";
-
-      const actions = !userHasAccount
-        ? {
-            actions: [
-              { type: "link", label: "Login", href: "/login" },
-              { type: "link", label: "Signup", href: "/signup" },
-            ],
-          }
-        : {
-            actions: [
-              {
-                type: "link",
-                label: "Go to Pricing",
-                href: "/pricing",
-              },
-            ],
-          };
-
-      const creditsResponse = await fetchQuery(
-        creditsApi.entitlements.getCreditsForActor,
-        { anonymousId: anonymousId ?? undefined },
-        token ? { token } : {},
-      );
-      const entitlements = buildClientEntitlements({
-        userHasAccount,
-        credits: creditsResponse?.credits ?? 0,
-      });
-
-      const res = NextResponse.json(
-        {
-          error: "INSUFFICIENT_CREDITS",
-          entitlements,
-          actions,
-          assistantMessage,
-        },
-        { status: 402 },
-      );
-      if (anonymousId && (!fromCookie || shouldSetAnonCookie)) {
-        res.headers.append(
-          "Set-Cookie",
-          buildCookieHeader(ANON_COOKIE, anonymousId),
-        );
-      }
-      return res;
     }
-    console.error("[ai] credits reserve error:", error);
-    const res = NextResponse.json(
-      { error: "Unable to reserve credits. Please try again." },
-      { status: 503 },
-    );
+
+    const entitlements = buildClientEntitlements({
+      userHasAccount,
+      credits: currentCredits,
+    });
+
+    const encoder = new TextEncoder();
+    const headers = new Headers({
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache, no-transform",
+      Connection: "keep-alive",
+    });
+    headers.set("X-User-Has-Account", userHasAccount ? "1" : "0");
+    headers.set("X-Credits", String(currentCredits));
     if (anonymousId && (!fromCookie || shouldSetAnonCookie)) {
-      res.headers.append(
-        "Set-Cookie",
-        buildCookieHeader(ANON_COOKIE, anonymousId),
-      );
+      headers.append("Set-Cookie", buildCookieHeader(ANON_COOKIE, anonymousId));
     }
-    return res;
+
+    const stream = new ReadableStream({
+      start(controller) {
+        const sendEvent = (event: string, data: object) => {
+          controller.enqueue(
+            encoder.encode(
+              `event: ${event}\n` + `data: ${JSON.stringify(data)}\n\n`,
+            ),
+          );
+        };
+
+        sendEvent("meta", { entitlements });
+        if (actions.length > 0) {
+          sendEvent("actions", { actions });
+        }
+        sendEvent("delta", { text: assistantMessage });
+        sendEvent("done", {});
+        controller.close();
+      },
+    });
+
+    return new Response(stream, { headers });
   }
 
   const clientEntitlements = buildClientEntitlements({

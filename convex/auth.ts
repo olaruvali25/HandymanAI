@@ -3,6 +3,7 @@ import { Password } from "@convex-dev/auth/providers/Password";
 import Google from "@auth/core/providers/google";
 import Facebook from "@auth/core/providers/facebook";
 import type { Value } from "convex/values";
+import { insertLedgerEntry } from "./creditLedger";
 
 const googleProvider = () => {
   const clientId = process.env.GOOGLE_CLIENT_ID;
@@ -54,4 +55,40 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
     }),
     ...oauthProviders,
   ],
+  callbacks: {
+    async afterUserCreatedOrUpdated(ctx, { userId }) {
+      const user = await ctx.db.get(userId);
+      if (!user) return;
+      const now = Date.now();
+      const hasCredits = typeof user.credits === "number";
+      const currentCredits = hasCredits ? user.credits : 0;
+
+      if (user.loginBonusGrantedAt) {
+        if (!hasCredits || !user.plan) {
+          await ctx.db.patch(userId, {
+            credits: currentCredits,
+            plan: user.plan ?? "none",
+            updatedAt: now,
+          });
+        }
+        return;
+      }
+
+      const nextCredits = currentCredits + 10;
+      await ctx.db.patch(userId, {
+        credits: nextCredits,
+        loginBonusGrantedAt: now,
+        plan: user.plan ?? "none",
+        updatedAt: now,
+      });
+      await insertLedgerEntry(ctx, {
+        actorType: "user",
+        userId,
+        kind: "login_bonus_10",
+        amount: 10,
+        balanceAfter: nextCredits,
+        createdAt: now,
+      });
+    },
+  },
 });

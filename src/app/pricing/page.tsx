@@ -58,7 +58,6 @@ const creditCosts = [
     value: "17 credits (2 + 15)",
   },
   { label: "Text reply from Fixly", value: "2 credits" },
-  ,
 ];
 
 export const metadata: Metadata = {

@@ -214,7 +214,6 @@ export default function ProfilePage() {
                 </Button>
               </CardContent>
             </Card>
-
           </div>
         </div>
       </Container>

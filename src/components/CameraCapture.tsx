@@ -71,9 +71,7 @@ export default function CameraCapture({
         }
       } catch (err) {
         const message =
-          err instanceof Error
-            ? err.message
-            : "Unable to access the camera.";
+          err instanceof Error ? err.message : "Unable to access the camera.";
         if (isMounted) {
           setError(message);
           onError?.(message);
@@ -136,7 +134,7 @@ export default function CameraCapture({
         ) : null}
 
         {lastCapture ? (
-          <div className="absolute left-4 top-4 overflow-hidden rounded-xl border border-white/20 bg-black/40">
+          <div className="absolute top-4 left-4 overflow-hidden rounded-xl border border-white/20 bg-black/40">
             <img
               src={lastCapture}
               alt="Last capture"
@@ -150,7 +148,7 @@ export default function CameraCapture({
         <button
           type="button"
           onClick={handleSwitchCamera}
-          className="rounded-full border border-white/30 px-4 py-2 text-xs font-semibold uppercase tracking-widest text-white/80"
+          className="rounded-full border border-white/30 px-4 py-2 text-xs font-semibold tracking-widest text-white/80 uppercase"
           disabled={!isReady || Boolean(error)}
         >
           Switch Camera
@@ -168,7 +166,7 @@ export default function CameraCapture({
 
         <button
           type="button"
-          className="rounded-full border border-white/30 px-4 py-2 text-xs font-semibold uppercase tracking-widest text-white/80"
+          className="rounded-full border border-white/30 px-4 py-2 text-xs font-semibold tracking-widest text-white/80 uppercase"
           disabled
         >
           Toggle Flash

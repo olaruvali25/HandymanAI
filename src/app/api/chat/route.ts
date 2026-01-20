@@ -168,7 +168,8 @@ export async function POST(req: Request) {
   );
   const verifierPrompt = await readFile(verifierPath, "utf8");
 
-  const model = env.OPENAI_MODEL ?? "gpt-5.2";
+  const primaryModel = "gpt-4.1";
+  const verifierModel = "gpt-4.1-mini";
 
   const encoder = new TextEncoder();
   const headers = new Headers({
@@ -190,7 +191,7 @@ export async function POST(req: Request) {
       try {
         const openai = getOpenAIClient();
         const draftResponse = await openai.responses.create({
-          model,
+          model: primaryModel,
           input: [
             {
               role: "system",
@@ -214,7 +215,7 @@ export async function POST(req: Request) {
         ].join("\n");
 
         const verifierStream = await openai.responses.create({
-          model,
+          model: verifierModel,
           stream: true,
           input: [
             {

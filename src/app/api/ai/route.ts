@@ -43,6 +43,8 @@ const STREAMING_DISABLED = process.env.FIXLY_DISABLE_STREAMING === "1";
 const USER_MESSAGE_COST = 2;
 const IMAGE_SURCHARGE_COST = 15;
 const ASSISTANT_REPLY_COST = 2;
+const SCOPE_MODEL = "gpt-4.1-mini";
+const PRIMARY_MODEL = "gpt-4.1";
 
 const CACHE_MAX_ENTRIES = 1000;
 const CACHE_TTL_MS = 1000 * 60 * 60 * 6;
@@ -53,7 +55,7 @@ class BoundedMap<K, V> {
   constructor(
     private readonly maxEntries: number,
     private readonly ttlMs: number,
-  ) {}
+  ) { }
 
   private prune(now = Date.now()) {
     for (const [key, entry] of this.map) {
@@ -622,7 +624,7 @@ export async function POST(req: Request) {
           },
           token ? { token } : {},
         );
-      } catch {}
+      } catch { }
 
       let plan: string | null = null;
       if (token) {
@@ -642,20 +644,20 @@ export async function POST(req: Request) {
 
       const actions = !userHasAccount
         ? {
-            actions: [
-              { type: "link", label: "Login", href: "/login" },
-              { type: "link", label: "Signup", href: "/signup" },
-            ],
-          }
+          actions: [
+            { type: "link", label: "Login", href: "/login" },
+            { type: "link", label: "Signup", href: "/signup" },
+          ],
+        }
         : {
-            actions: [
-              {
-                type: "link",
-                label: "Go to Pricing",
-                href: "/pricing",
-              },
-            ],
-          };
+          actions: [
+            {
+              type: "link",
+              label: "Go to Pricing",
+              href: "/pricing",
+            },
+          ],
+        };
 
       const creditsResponse = await fetchQuery(
         creditsApi.entitlements.getCreditsForActor,
@@ -703,11 +705,11 @@ export async function POST(req: Request) {
     credits: creditsRemaining,
   });
   const threadId = body.threadId ?? null;
-  const baseModel = env.OPENAI_MODEL ?? "gpt-5.2";
-  const model =
-    attachments.length > 0 && !/gpt-4|4o/i.test(baseModel)
+  const basePrimaryModel = PRIMARY_MODEL;
+  const primaryModel =
+    attachments.length > 0 && !/gpt-4|4o/i.test(basePrimaryModel)
       ? "gpt-4o-mini"
-      : baseModel;
+      : basePrimaryModel;
   if (process.env.NODE_ENV === "development") {
     console.debug("[ai] attachments", {
       count: attachments.length,
@@ -715,7 +717,7 @@ export async function POST(req: Request) {
       sizes: attachments.map((attachment) => attachment.size),
     });
     console.debug("[ai] vision model", {
-      model,
+      model: primaryModel,
       hasAttachments: attachments.length > 0,
     });
   }
@@ -780,7 +782,7 @@ export async function POST(req: Request) {
         ].join("\n");
 
         const scopeResponse = await openai.responses.create({
-          model,
+          model: SCOPE_MODEL,
           input: [
             { role: "system", content: scopePrompt.trim() },
             { role: "user", content: scopeInput },
@@ -827,16 +829,16 @@ export async function POST(req: Request) {
         | { type: "input_text"; text: string }
         | { type: "input_image"; image_url: string; detail: "auto" }
       > = [
-        { type: "input_text", text: primaryInput },
-        ...attachments.map((attachment) => ({
-          type: "input_image" as const,
-          image_url: attachment.url ?? attachment.dataUrl ?? "",
-          detail: "auto" as const,
-        })),
-      ];
+          { type: "input_text", text: primaryInput },
+          ...attachments.map((attachment) => ({
+            type: "input_image" as const,
+            image_url: attachment.url ?? attachment.dataUrl ?? "",
+            detail: "auto" as const,
+          })),
+        ];
 
       const primaryResponse = await openai.responses.create({
-        model,
+        model: primaryModel,
         input: [
           { role: "system", content: primaryPrompt.trim() },
           { role: "user", content: primaryContent },
@@ -915,7 +917,7 @@ export async function POST(req: Request) {
           ].join("\n");
 
           const scopeResponse = await openai.responses.create({
-            model,
+            model: SCOPE_MODEL,
             input: [
               { role: "system", content: scopePrompt.trim() },
               { role: "user", content: scopeInput },
@@ -962,16 +964,16 @@ export async function POST(req: Request) {
           | { type: "input_text"; text: string }
           | { type: "input_image"; image_url: string; detail: "auto" }
         > = [
-          { type: "input_text", text: primaryInput },
-          ...attachments.map((attachment) => ({
-            type: "input_image" as const,
-            image_url: attachment.url ?? attachment.dataUrl ?? "",
-            detail: "auto" as const,
-          })),
-        ];
+            { type: "input_text", text: primaryInput },
+            ...attachments.map((attachment) => ({
+              type: "input_image" as const,
+              image_url: attachment.url ?? attachment.dataUrl ?? "",
+              detail: "auto" as const,
+            })),
+          ];
 
         const primaryStream = await openai.responses.create({
-          model,
+          model: primaryModel,
           stream: true,
           input: [
             { role: "system", content: primaryPrompt.trim() },

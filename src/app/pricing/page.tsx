@@ -52,16 +52,13 @@ const plans = [
 ];
 
 const creditCosts = [
-  { label: "Text message you send", value: "1 credit" },
+  { label: "Text message you send", value: "2 credits" },
   {
     label: "Message with photo attachments",
-    value: "16 credits (1 + 15)",
+    value: "17 credits (2 + 15)",
   },
   { label: "Text reply from Fixly", value: "2 credits" },
-  {
-    label: "Reply that generates an image",
-    value: "7 credits (2 + 5)",
-  },
+  ,
 ];
 
 export const metadata: Metadata = {
@@ -89,11 +86,10 @@ export default function PricingPage() {
           <div className="relative z-10 grid gap-16 lg:grid-cols-[1.1fr_0.9fr]">
             <div className="flex flex-col justify-center">
               <h1 className="font-display text-5xl font-semibold tracking-tight text-white sm:text-6xl lg:text-7xl lg:leading-[1.1]">
-                Simple, transparent pricing.
+                Fix it yourself.
               </h1>
               <p className="mt-8 max-w-2xl text-lg leading-relaxed text-[var(--muted)] sm:text-xl">
-                Pick a monthly credit plan that fits your needs, or top up
-                anytime.
+                Grab some credits and stop overpaying for repairs that you could do yourself.
               </p>
               <div className="mt-10">
                 <CreditsStatus />
@@ -131,11 +127,10 @@ export default function PricingPage() {
             {plans.map((plan) => (
               <div
                 key={plan.name}
-                className={`group relative flex h-full flex-col rounded-[2.5rem] border p-8 shadow-2xl backdrop-blur-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-black/50 ${
-                  plan.badge
-                    ? "border-[var(--accent)]/20 bg-[var(--accent)]/[0.02] hover:border-[var(--accent)]/30 hover:bg-[var(--accent)]/[0.04]"
-                    : "border-white/5 bg-white/[0.02] hover:border-white/10 hover:bg-white/[0.05]"
-                }`}
+                className={`group relative flex h-full flex-col rounded-[2.5rem] border p-8 shadow-2xl backdrop-blur-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-black/50 ${plan.badge
+                  ? "border-[var(--accent)]/20 bg-[var(--accent)]/[0.02] hover:border-[var(--accent)]/30 hover:bg-[var(--accent)]/[0.04]"
+                  : "border-white/5 bg-white/[0.02] hover:border-white/10 hover:bg-white/[0.05]"
+                  }`}
               >
                 {plan.badge ? (
                   <div className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-[var(--accent)] px-4 py-1 text-[10px] font-bold tracking-[0.2em] text-black uppercase shadow-[0_0_20px_-5px_var(--accent)]">
@@ -239,9 +234,8 @@ export default function PricingPage() {
           </h2>
           <div className="mt-12 grid gap-8 md:grid-cols-3">
             {[
-              "Text-only turn: 3 credits (1 + 2)",
-              "You send photos + text reply: 18 credits (16 + 2)",
-              "Text + image reply: 8 credits (1 + 7)",
+              "Text-only turn: 4 credits (2 + 2)",
+              "You send photos + text reply: 19 credits (15 + 2 + 2)",
             ].map((example) => (
               <div
                 key={example}

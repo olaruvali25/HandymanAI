@@ -62,7 +62,6 @@ export default function TasksPage() {
         <div className="mx-auto max-w-2xl space-y-6">
           <div>
             <p className="text-xs tracking-[0.2em] text-[var(--accent-soft)] uppercase">
-              Demo feature
             </p>
             <h1 className="font-display text-3xl font-semibold text-white sm:text-4xl">
               Tasks
@@ -152,9 +151,8 @@ export default function TasksPage() {
                             );
                           }
                         }}
-                        aria-label={`Mark "${task.title}" as ${
-                          task.completed ? "incomplete" : "complete"
-                        }`}
+                        aria-label={`Mark "${task.title}" as ${task.completed ? "incomplete" : "complete"
+                          }`}
                       />
                       <div className="min-w-0 flex-1">
                         <div

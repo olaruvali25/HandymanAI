@@ -88,7 +88,8 @@ export default function PricingPage() {
                 Fix it yourself.
               </h1>
               <p className="mt-8 max-w-2xl text-lg leading-relaxed text-[var(--muted)] sm:text-xl">
-                Grab some credits and stop overpaying for repairs that you could do yourself.
+                Grab some credits and stop overpaying for repairs that you could
+                do yourself.
               </p>
               <div className="mt-10">
                 <CreditsStatus />
@@ -126,10 +127,11 @@ export default function PricingPage() {
             {plans.map((plan) => (
               <div
                 key={plan.name}
-                className={`group relative flex h-full flex-col rounded-[2.5rem] border p-8 shadow-2xl backdrop-blur-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-black/50 ${plan.badge
-                  ? "border-[var(--accent)]/20 bg-[var(--accent)]/[0.02] hover:border-[var(--accent)]/30 hover:bg-[var(--accent)]/[0.04]"
-                  : "border-white/5 bg-white/[0.02] hover:border-white/10 hover:bg-white/[0.05]"
-                  }`}
+                className={`group relative flex h-full flex-col rounded-[2.5rem] border p-8 shadow-2xl backdrop-blur-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-black/50 ${
+                  plan.badge
+                    ? "border-[var(--accent)]/20 bg-[var(--accent)]/[0.02] hover:border-[var(--accent)]/30 hover:bg-[var(--accent)]/[0.04]"
+                    : "border-white/5 bg-white/[0.02] hover:border-white/10 hover:bg-white/[0.05]"
+                }`}
               >
                 {plan.badge ? (
                   <div className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-[var(--accent)] px-4 py-1 text-[10px] font-bold tracking-[0.2em] text-black uppercase shadow-[0_0_20px_-5px_var(--accent)]">

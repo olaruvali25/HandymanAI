@@ -55,7 +55,7 @@ class BoundedMap<K, V> {
   constructor(
     private readonly maxEntries: number,
     private readonly ttlMs: number,
-  ) { }
+  ) {}
 
   private prune(now = Date.now()) {
     for (const [key, entry] of this.map) {
@@ -624,7 +624,7 @@ export async function POST(req: Request) {
           },
           token ? { token } : {},
         );
-      } catch { }
+      } catch {}
 
       let plan: string | null = null;
       if (token) {
@@ -644,20 +644,20 @@ export async function POST(req: Request) {
 
       const actions = !userHasAccount
         ? {
-          actions: [
-            { type: "link", label: "Login", href: "/login" },
-            { type: "link", label: "Signup", href: "/signup" },
-          ],
-        }
+            actions: [
+              { type: "link", label: "Login", href: "/login" },
+              { type: "link", label: "Signup", href: "/signup" },
+            ],
+          }
         : {
-          actions: [
-            {
-              type: "link",
-              label: "Go to Pricing",
-              href: "/pricing",
-            },
-          ],
-        };
+            actions: [
+              {
+                type: "link",
+                label: "Go to Pricing",
+                href: "/pricing",
+              },
+            ],
+          };
 
       const creditsResponse = await fetchQuery(
         creditsApi.entitlements.getCreditsForActor,
@@ -829,13 +829,13 @@ export async function POST(req: Request) {
         | { type: "input_text"; text: string }
         | { type: "input_image"; image_url: string; detail: "auto" }
       > = [
-          { type: "input_text", text: primaryInput },
-          ...attachments.map((attachment) => ({
-            type: "input_image" as const,
-            image_url: attachment.url ?? attachment.dataUrl ?? "",
-            detail: "auto" as const,
-          })),
-        ];
+        { type: "input_text", text: primaryInput },
+        ...attachments.map((attachment) => ({
+          type: "input_image" as const,
+          image_url: attachment.url ?? attachment.dataUrl ?? "",
+          detail: "auto" as const,
+        })),
+      ];
 
       const primaryResponse = await openai.responses.create({
         model: primaryModel,
@@ -964,13 +964,13 @@ export async function POST(req: Request) {
           | { type: "input_text"; text: string }
           | { type: "input_image"; image_url: string; detail: "auto" }
         > = [
-            { type: "input_text", text: primaryInput },
-            ...attachments.map((attachment) => ({
-              type: "input_image" as const,
-              image_url: attachment.url ?? attachment.dataUrl ?? "",
-              detail: "auto" as const,
-            })),
-          ];
+          { type: "input_text", text: primaryInput },
+          ...attachments.map((attachment) => ({
+            type: "input_image" as const,
+            image_url: attachment.url ?? attachment.dataUrl ?? "",
+            detail: "auto" as const,
+          })),
+        ];
 
         const primaryStream = await openai.responses.create({
           model: primaryModel,

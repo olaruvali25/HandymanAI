@@ -4,10 +4,7 @@ import { v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
 import { mutation, query, type MutationCtx } from "./_generated/server";
 import { CREDIT_COSTS } from "./billingConfig";
-import {
-  findLedgerEntryByTurnKind,
-  insertLedgerEntry,
-} from "./creditLedger";
+import { findLedgerEntryByTurnKind, insertLedgerEntry } from "./creditLedger";
 
 const DEFAULT_ANON_CREDITS = 20;
 const DEFAULT_USER_CREDITS = 0;

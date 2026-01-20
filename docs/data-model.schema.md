@@ -106,7 +106,7 @@ Fields:
 - `guestChatId?`: string
 - `role`: "user" | "assistant" | "system"
 - `contentText`: string
-- `attachments?`: { name: string; type: string; size: number; storageId?: Id<"_storage">; url?: string; dataUrl?: string }[]
+- `attachments?`: { name: string; type: string; size: number; storageId?: Id<"\_storage">; url?: string; dataUrl?: string }[]
 - `createdAt`: number
 
 Indexes:

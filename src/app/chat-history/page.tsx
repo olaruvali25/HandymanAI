@@ -26,7 +26,7 @@ export default function ChatHistoryPage() {
           setEntitlements({ userPlan: data.entitlements.userPlan });
         }
       })
-      .catch(() => { });
+      .catch(() => {});
     return () => {
       isMounted = false;
     };
@@ -66,7 +66,7 @@ export default function ChatHistoryPage() {
             </div>
 
             <div className="flex flex-col gap-3">
-              <label className="text-xs uppercase tracking-[0.2em] text-[var(--muted)]">
+              <label className="text-xs tracking-[0.2em] text-[var(--muted)] uppercase">
                 Search
               </label>
               <input
@@ -121,13 +121,13 @@ export default function ChatHistoryPage() {
                         {new Date(chat.updatedAt).toLocaleString()}
                       </div>
                     </div>
-                    <div className="mt-4 inline-flex items-center rounded-full border border-[var(--accent)]/30 bg-[var(--accent)]/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-[var(--accent)]">
+                    <div className="mt-4 inline-flex items-center rounded-full border border-[var(--accent)]/30 bg-[var(--accent)]/10 px-3 py-1 text-[10px] font-semibold tracking-[0.2em] text-[var(--accent)] uppercase">
                       Available on Medium/Big/Pro
                     </div>
                     <div className="mt-4">
                       <Link
                         href={`/?thread=${chat.id}`}
-                        className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--accent)] transition hover:text-[var(--accent-soft)]"
+                        className="text-xs font-semibold tracking-[0.2em] text-[var(--accent)] uppercase transition hover:text-[var(--accent-soft)]"
                       >
                         Open chat
                       </Link>

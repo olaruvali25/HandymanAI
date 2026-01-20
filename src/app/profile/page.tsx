@@ -37,9 +37,7 @@ export default function ProfilePage() {
   const { isAuthenticated, isLoading } = useConvexAuth();
   const { user } = useUser();
   const { data: entitlements } = useEntitlementsQuery();
-  const createPortalSession = useAction(
-    api.stripe.createCustomerPortalSession,
-  );
+  const createPortalSession = useAction(api.stripe.createCustomerPortalSession);
   const [isManagingBilling, setIsManagingBilling] = useState(false);
 
   const createdAt = useMemo(() => formatDate(user?._creationTime), [user]);

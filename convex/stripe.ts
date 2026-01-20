@@ -272,7 +272,9 @@ export const handleWebhook = internalAction({
     if (event.type === "customer.subscription.created") {
       const subscription = event.data.object as SubscriptionWithPeriods;
       const customerId =
-        typeof subscription.customer === "string" ? subscription.customer : null;
+        typeof subscription.customer === "string"
+          ? subscription.customer
+          : null;
       const userId = await resolveUserId(
         ctx,
         subscription.metadata?.userId ?? null,
@@ -309,7 +311,9 @@ export const handleWebhook = internalAction({
     if (event.type === "customer.subscription.updated") {
       const subscription = event.data.object as SubscriptionWithPeriods;
       const customerId =
-        typeof subscription.customer === "string" ? subscription.customer : null;
+        typeof subscription.customer === "string"
+          ? subscription.customer
+          : null;
       const userId = await resolveUserId(
         ctx,
         subscription.metadata?.userId ?? null,
@@ -318,9 +322,15 @@ export const handleWebhook = internalAction({
       if (userId) {
         const priceId = subscription.items.data[0]?.price?.id ?? null;
         const newPlan = getPlanFromPriceId(priceId);
-        const previousAttributes = (event as Stripe.Event & {
-          data: { previous_attributes?: { items?: { data?: Array<{ price?: { id?: string | null } }> } } };
-        }).data.previous_attributes;
+        const previousAttributes = (
+          event as Stripe.Event & {
+            data: {
+              previous_attributes?: {
+                items?: { data?: Array<{ price?: { id?: string | null } }> };
+              };
+            };
+          }
+        ).data.previous_attributes;
         const previousPriceId =
           previousAttributes?.items?.data?.[0]?.price?.id ?? null;
         const previousPlan = getPlanFromPriceId(previousPriceId);
@@ -341,7 +351,10 @@ export const handleWebhook = internalAction({
           : undefined;
         const nextRenewalAt = currentPeriodEnd;
 
-        if (newPlan && getPlanRank(newPlan) > getPlanRank(effectivePreviousPlan)) {
+        if (
+          newPlan &&
+          getPlanRank(newPlan) > getPlanRank(effectivePreviousPlan)
+        ) {
           await ctx.runMutation(internal.credits.applyPlanUpgradeFromStripe, {
             userId,
             newPlan,
@@ -393,7 +406,9 @@ export const handleWebhook = internalAction({
     if (event.type === "customer.subscription.deleted") {
       const subscription = event.data.object as SubscriptionWithPeriods;
       const customerId =
-        typeof subscription.customer === "string" ? subscription.customer : null;
+        typeof subscription.customer === "string"
+          ? subscription.customer
+          : null;
       const userId = await resolveUserId(
         ctx,
         subscription.metadata?.userId ?? null,
@@ -420,9 +435,7 @@ export const handleWebhook = internalAction({
     if (event.type === "invoice.payment_succeeded") {
       const invoice = event.data.object as InvoiceWithExtras;
       const subscriptionId =
-        typeof invoice.subscription === "string"
-          ? invoice.subscription
-          : null;
+        typeof invoice.subscription === "string" ? invoice.subscription : null;
       const customerId =
         typeof invoice.customer === "string" ? invoice.customer : null;
       const priceId = invoice.lines?.data?.[0]?.price?.id ?? null;
@@ -500,9 +513,7 @@ export const handleWebhook = internalAction({
     if (event.type === "invoice.payment_failed") {
       const invoice = event.data.object as InvoiceWithExtras;
       const subscriptionId =
-        typeof invoice.subscription === "string"
-          ? invoice.subscription
-          : null;
+        typeof invoice.subscription === "string" ? invoice.subscription : null;
       const customerId =
         typeof invoice.customer === "string" ? invoice.customer : null;
       const userId = await resolveUserId(

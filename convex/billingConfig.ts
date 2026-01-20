@@ -30,7 +30,6 @@ export const CREDIT_COSTS = {
   assistantReply: 2,
 } as const;
 
-export const getMonthlyCreditsForPlan = (plan: Plan) =>
-  PLAN_CREDITS[plan] ?? 0;
+export const getMonthlyCreditsForPlan = (plan: Plan) => PLAN_CREDITS[plan] ?? 0;
 
 export const getPlanRank = (plan: Plan) => PLAN_RANK[plan] ?? 0;

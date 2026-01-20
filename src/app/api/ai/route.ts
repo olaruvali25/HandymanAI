@@ -155,7 +155,18 @@ const validatePayload = (body: AiRequestBody, hasAttachments: boolean) => {
   return null;
 };
 
-const sanitizeAttachments = (attachments?: AiRequestBody["attachments"]) => {
+type SanitizedAttachment = {
+  name: string;
+  type: string;
+  size: number;
+  storageId?: string;
+  url?: string;
+  dataUrl?: string;
+};
+
+const sanitizeAttachments = (
+  attachments?: AiRequestBody["attachments"],
+): SanitizedAttachment[] => {
   if (!Array.isArray(attachments) || attachments.length === 0) return [];
 
   const getDataUrlSizeBytes = (dataUrl: string) => {
@@ -170,7 +181,7 @@ const sanitizeAttachments = (attachments?: AiRequestBody["attachments"]) => {
     return Number.isFinite(size) && size >= 0 ? size : null;
   };
 
-  return attachments.flatMap((attachment) => {
+  return attachments.flatMap<SanitizedAttachment>((attachment) => {
     if (!attachment || typeof attachment !== "object") return [];
     const name = attachment.name ?? "upload";
     const type = attachment.type ?? "";
@@ -228,9 +239,9 @@ const sanitizeAttachments = (attachments?: AiRequestBody["attachments"]) => {
 };
 
 const resolveAttachmentUrls = async (
-  attachments: ReturnType<typeof sanitizeAttachments>,
+  attachments: SanitizedAttachment[],
   token: string | null,
-) => {
+): Promise<SanitizedAttachment[]> => {
   if (attachments.length === 0) return attachments;
   const resolved = await Promise.all(
     attachments.map(async (attachment) => {
@@ -333,7 +344,7 @@ const getAnonymousId = (req: Request, body: AiRequestBody | null) => {
 
 const buildTurnId = (
   messages: IncomingMessage[],
-  attachments: ReturnType<typeof sanitizeAttachments>,
+  attachments: SanitizedAttachment[],
 ) => {
   const payload = JSON.stringify({
     messages,
@@ -341,7 +352,12 @@ const buildTurnId = (
       name: attachment.name,
       type: attachment.type,
       size: attachment.size,
-      digest: (attachment.url ?? attachment.dataUrl ?? attachment.storageId ?? "").slice(0, 80),
+      digest: (
+        attachment.url ??
+        attachment.dataUrl ??
+        attachment.storageId ??
+        ""
+      ).slice(0, 80),
     })),
   });
   return createHash("sha256").update(payload).digest("hex");
@@ -537,10 +553,7 @@ export async function POST(req: Request) {
   }
 
   if (attachmentsFromForm.length > 0) {
-    return NextResponse.json(
-      { error: "Invalid form data." },
-      { status: 400 },
-    );
+    return NextResponse.json({ error: "Invalid form data." }, { status: 400 });
   }
 
   const rawAttachments = sanitizeAttachments(body?.attachments);
@@ -570,9 +583,13 @@ export async function POST(req: Request) {
     );
   }
 
-  const attachments = await resolveAttachmentUrls(rawAttachments, token);
+  const attachments: SanitizedAttachment[] = await resolveAttachmentUrls(
+    rawAttachments,
+    token,
+  );
   const hasImageAttachments = attachments.length > 0;
-  const userCost = USER_MESSAGE_COST + (hasImageAttachments ? IMAGE_SURCHARGE_COST : 0);
+  const userCost =
+    USER_MESSAGE_COST + (hasImageAttachments ? IMAGE_SURCHARGE_COST : 0);
   const assistantCost = ASSISTANT_REPLY_COST;
   const turnId = buildTurnId(body.messages, attachments);
 
@@ -610,11 +627,7 @@ export async function POST(req: Request) {
       let plan: string | null = null;
       if (token) {
         try {
-          const me = await fetchQuery(
-            api.users.me,
-            {},
-            token ? { token } : {},
-          );
+          const me = await fetchQuery(api.users.me, {}, token ? { token } : {});
           plan = typeof me?.plan === "string" ? me.plan : null;
         } catch {
           plan = null;
@@ -950,11 +963,11 @@ export async function POST(req: Request) {
           | { type: "input_image"; image_url: string; detail: "auto" }
         > = [
           { type: "input_text", text: primaryInput },
-        ...attachments.map((attachment) => ({
-          type: "input_image" as const,
-          image_url: attachment.url ?? attachment.dataUrl ?? "",
-          detail: "auto" as const,
-        })),
+          ...attachments.map((attachment) => ({
+            type: "input_image" as const,
+            image_url: attachment.url ?? attachment.dataUrl ?? "",
+            detail: "auto" as const,
+          })),
         ];
 
         const primaryStream = await openai.responses.create({

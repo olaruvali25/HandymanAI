@@ -18,11 +18,12 @@ export default function HowItWorksPage() {
               Reliable Fix Guidance
             </div>
             <h1 className="font-display mt-8 text-5xl font-semibold tracking-tight text-white sm:text-6xl lg:text-7xl lg:leading-[1.1]">
-              Stop guessing. <br className="hidden sm:block" /> Fix it right the first time.
+              Stop guessing. <br className="hidden sm:block" /> Fix it right the
+              first time.
             </h1>
             <p className="mx-auto mt-8 max-w-2xl text-lg leading-relaxed text-[var(--muted)] sm:text-xl">
-              Fixly helps you diagnose problems and provides
-              clear, professional-grade repair steps in minutes.
+              Fixly helps you diagnose problems and provides clear,
+              professional-grade repair steps in minutes.
             </p>
             <div className="mt-12 flex justify-center gap-4">
               <Link className={primaryButton} href="/signup">
@@ -52,7 +53,7 @@ export default function HowItWorksPage() {
 
             <div className="relative mt-20">
               {/* Connecting Line */}
-              <div className="absolute left-[23px] top-0 h-full w-px bg-gradient-to-b from-[var(--accent)]/50 via-white/10 to-transparent sm:left-1/2 sm:-translate-x-px" />
+              <div className="absolute top-0 left-[23px] h-full w-px bg-gradient-to-b from-[var(--accent)]/50 via-white/10 to-transparent sm:left-1/2 sm:-translate-x-px" />
 
               <div className="space-y-24 sm:space-y-32">
                 {[
@@ -71,8 +72,9 @@ export default function HowItWorksPage() {
                 ].map((item, index) => (
                   <div
                     key={item.title}
-                    className={`relative flex flex-col gap-8 sm:flex-row sm:items-center ${index % 2 === 1 ? "sm:flex-row-reverse" : ""
-                      }`}
+                    className={`relative flex flex-col gap-8 sm:flex-row sm:items-center ${
+                      index % 2 === 1 ? "sm:flex-row-reverse" : ""
+                    }`}
                   >
                     {/* Step Number */}
                     <div className="relative z-10 flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-[var(--accent)]/30 bg-[var(--bg)] text-sm font-bold text-[var(--accent)] shadow-[0_0_20px_-5px_var(--accent)] sm:mx-auto">
@@ -81,7 +83,9 @@ export default function HowItWorksPage() {
 
                     {/* Content */}
                     <div className="flex-1 sm:w-1/2">
-                      <div className={`sm:px-12 ${index % 2 === 1 ? "sm:text-right" : "sm:text-left"}`}>
+                      <div
+                        className={`sm:px-12 ${index % 2 === 1 ? "sm:text-right" : "sm:text-left"}`}
+                      >
                         <h3 className="font-display text-2xl font-semibold text-white">
                           {item.title}
                         </h3>
@@ -127,7 +131,8 @@ export default function HowItWorksPage() {
                   $120 – $240
                 </p>
                 <p className="mt-4 text-base leading-relaxed text-[var(--muted)]/60">
-                  Basic call-out fee, plus parts and labor. Often involves scheduling delays and waiting for a window.
+                  Basic call-out fee, plus parts and labor. Often involves
+                  scheduling delays and waiting for a window.
                 </p>
               </div>
 
@@ -144,7 +149,10 @@ export default function HowItWorksPage() {
                     "Fix issues on your own schedule.",
                     "Build practical skills with every repair.",
                   ].map((benefit) => (
-                    <li key={benefit} className="flex items-start gap-4 text-white/80">
+                    <li
+                      key={benefit}
+                      className="flex items-start gap-4 text-white/80"
+                    >
                       <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--accent)] shadow-[0_0_8px_var(--accent)]" />
                       <span className="text-base leading-tight">{benefit}</span>
                     </li>
@@ -168,9 +176,9 @@ export default function HowItWorksPage() {
               Guidance with safety in mind.
             </h2>
             <p className="mx-auto mt-8 max-w-2xl text-lg leading-relaxed text-[var(--muted)]">
-              Fixly prioritizes safe practices. We’ll always recommend when to pause and
-              consult a licensed professional for electrical, gas, or structural
-              work.
+              Fixly prioritizes safe practices. We’ll always recommend when to
+              pause and consult a licensed professional for electrical, gas, or
+              structural work.
             </p>
           </div>
         </Container>

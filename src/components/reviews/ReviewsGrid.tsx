@@ -47,10 +47,11 @@ export default function ReviewsGrid({ reviews }: ReviewsGridProps) {
               key={filter}
               type="button"
               onClick={() => setActiveFilter(filter)}
-              className={`rounded-full border px-5 py-2 text-[11px] font-bold tracking-[0.1em] uppercase transition-all duration-300 ${isActive
+              className={`rounded-full border px-5 py-2 text-[11px] font-bold tracking-[0.1em] uppercase transition-all duration-300 ${
+                isActive
                   ? "border-[var(--accent)] bg-[var(--accent)] text-black shadow-[0_0_20px_-5px_var(--accent)]/40"
                   : "border-white/5 bg-white/[0.03] text-white/40 hover:border-white/10 hover:bg-white/[0.06] hover:text-white/80"
-                }`}
+              }`}
             >
               {filter}
             </button>
@@ -82,7 +83,7 @@ export default function ReviewsGrid({ reviews }: ReviewsGridProps) {
             </div>
 
             {review.highlight ? (
-              <div className="mt-5 inline-flex self-start rounded-full bg-[var(--accent)]/10 border border-[var(--accent)]/20 px-3 py-1 text-[9px] font-bold tracking-[0.1em] text-[var(--accent)] uppercase">
+              <div className="mt-5 inline-flex self-start rounded-full border border-[var(--accent)]/20 bg-[var(--accent)]/10 px-3 py-1 text-[9px] font-bold tracking-[0.1em] text-[var(--accent)] uppercase">
                 {review.highlight}
               </div>
             ) : null}
@@ -90,12 +91,16 @@ export default function ReviewsGrid({ reviews }: ReviewsGridProps) {
             <div className="mt-8 rounded-2xl border border-white/5 bg-white/[0.02] px-5 py-4 text-[13px] leading-relaxed text-[var(--muted)]">
               <div className="flex flex-col gap-2">
                 <div>
-                  <span className="text-[10px] font-bold tracking-[0.1em] text-white/40 uppercase mr-2">Problem:</span>
+                  <span className="mr-2 text-[10px] font-bold tracking-[0.1em] text-white/40 uppercase">
+                    Problem:
+                  </span>
                   <span className="text-white/80">{review.problem}</span>
                 </div>
                 <div className="h-px w-full bg-white/5" />
                 <div>
-                  <span className="text-[10px] font-bold tracking-[0.1em] text-white/40 uppercase mr-2">Fix:</span>
+                  <span className="mr-2 text-[10px] font-bold tracking-[0.1em] text-white/40 uppercase">
+                    Fix:
+                  </span>
                   <span className="text-white/80">{review.fix}</span>
                 </div>
               </div>

@@ -170,9 +170,14 @@ const buildPayloadMessages = (messages: readonly ThreadMessage[]) => {
     .filter((message) => message.content.length > 0);
 };
 
-const buildHistoryContent = (message: HistoryMessage) => {
-  const parts: Array<TextMessagePart | { type: "image"; image: string; filename?: string }> =
-    [];
+const buildHistoryContent = (
+  message: HistoryMessage,
+): Array<
+  TextMessagePart | { type: "image"; image: string; filename?: string }
+> => {
+  const parts: Array<
+    TextMessagePart | { type: "image"; image: string; filename?: string }
+  > = [];
   if (message.contentText.trim()) {
     parts.push({ type: "text", text: message.contentText });
   }
@@ -186,7 +191,7 @@ const buildHistoryContent = (message: HistoryMessage) => {
       filename: attachment.name,
     });
   }
-  return parts.length > 0 ? parts : [{ type: "text", text: "" }];
+  return parts.length > 0 ? parts : [{ type: "text" as const, text: "" }];
 };
 
 const createChatAdapter = (options?: {
@@ -1317,13 +1322,10 @@ export default function GrokThread({
   const uploadedAttachmentsRef = useRef<Map<string, ChatAttachment[]>>(
     new Map(),
   );
-  const getRegisteredAttachments = useCallback(
-    (messageId?: string) => {
-      if (!messageId) return null;
-      return uploadedAttachmentsRef.current.get(messageId) ?? null;
-    },
-    [],
-  );
+  const getRegisteredAttachments = useCallback((messageId?: string) => {
+    if (!messageId) return null;
+    return uploadedAttachmentsRef.current.get(messageId) ?? null;
+  }, []);
   const registerAttachments = useCallback(
     (messageId: string | undefined, attachments: ChatAttachment[]) => {
       if (!messageId || attachments.length === 0) return;
@@ -1360,7 +1362,7 @@ export default function GrokThread({
             name: part.filename ?? "image.png",
             type: blob.type,
             size: blob.size,
-            storageId: payload.storageId,
+            storageId: payload.storageId as Id<"_storage">,
           });
         } catch {
           continue;
@@ -1513,6 +1515,7 @@ export default function GrokThread({
           appendMessages={appendMessages}
           renameThread={renameThread}
           deleteThread={deleteThread}
+          getRegisteredAttachments={getRegisteredAttachments}
           selectedFile={selectedFile}
           setSelectedFile={setSelectedFile}
           selectedLanguage={selectedLanguage}
@@ -1551,6 +1554,7 @@ const ChatThreadContent = ({
   appendMessages,
   renameThread,
   deleteThread,
+  getRegisteredAttachments,
   selectedFile,
   setSelectedFile,
   selectedLanguage,
@@ -1597,6 +1601,7 @@ const ChatThreadContent = ({
     title: string;
   }) => Promise<null>;
   deleteThread: (args: { threadId: Id<"chatThreads"> }) => Promise<null>;
+  getRegisteredAttachments: (messageId?: string) => ChatAttachment[] | null;
   selectedFile: File | null;
   setSelectedFile: (file: File | null) => void;
   selectedLanguage: string;
@@ -1717,7 +1722,6 @@ const ChatThreadContent = ({
     ttsNextPlayRef.current = 0;
     lastAssistantLengthRef.current = 0;
   };
-
 
   const playNextAudio = useCallback(function playNextAudioInner() {
     if (ttsSpeakingRef.current) return;
@@ -1873,9 +1877,7 @@ const ChatThreadContent = ({
       if (!Array.isArray(message.content)) return [];
       const legacy = message.content
         .filter(
-          (
-            part,
-          ): part is { type: "image"; image: string; filename?: string } =>
+          (part): part is { type: "image"; image: string; filename?: string } =>
             typeof part === "object" &&
             part !== null &&
             "type" in part &&

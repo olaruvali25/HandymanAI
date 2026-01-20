@@ -144,7 +144,8 @@ export const updateStripeSubscription = internalMutation({
     }
     await ctx.db.patch(args.userId, {
       plan: args.plan,
-      pendingDowngradePlan: args.pendingDowngradePlan ?? user.pendingDowngradePlan,
+      pendingDowngradePlan:
+        args.pendingDowngradePlan ?? user.pendingDowngradePlan,
       stripeCustomerId: args.stripeCustomerId ?? undefined,
       stripeSubscriptionId: args.stripeSubscriptionId ?? undefined,
       stripeSubscriptionStatus: args.stripeSubscriptionStatus ?? undefined,

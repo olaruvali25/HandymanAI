@@ -45,7 +45,7 @@ export default function AboutPage() {
                     key={step}
                     className="group rounded-2xl border border-white/5 bg-white/[0.03] px-6 py-5 text-sm text-white transition-all duration-300 hover:-translate-y-1 hover:border-white/10 hover:bg-white/[0.06] hover:shadow-2xl"
                   >
-                    <div className="text-[10px] font-bold tracking-[0.2em] text-[var(--muted)] uppercase group-hover:text-[var(--accent)] transition-colors">
+                    <div className="text-[10px] font-bold tracking-[0.2em] text-[var(--muted)] uppercase transition-colors group-hover:text-[var(--accent)]">
                       Step {index + 1}
                     </div>
                     <div className="mt-2 font-medium text-white/90">{step}</div>
@@ -129,7 +129,7 @@ export default function AboutPage() {
                       <div className="font-semibold text-white/90">
                         {card.title}
                       </div>
-                      <div className="mt-1 text-xs text-white/40 leading-relaxed">
+                      <div className="mt-1 text-xs leading-relaxed text-white/40">
                         {card.copy}
                       </div>
                     </div>
@@ -173,10 +173,12 @@ export default function AboutPage() {
                   key={value}
                   className="group rounded-[2rem] border border-white/5 bg-white/[0.02] px-8 py-8 text-sm text-white shadow-xl backdrop-blur-sm transition-all duration-300 hover:-translate-y-1 hover:border-white/10 hover:bg-white/[0.05] hover:shadow-2xl"
                 >
-                  <div className="mb-4 text-[10px] font-bold tracking-[0.2em] text-[var(--muted)] uppercase group-hover:text-[var(--accent)] transition-colors">
+                  <div className="mb-4 text-[10px] font-bold tracking-[0.2em] text-[var(--muted)] uppercase transition-colors group-hover:text-[var(--accent)]">
                     Promise
                   </div>
-                  <div className="text-base font-medium text-white/90 leading-snug">{value}</div>
+                  <div className="text-base leading-snug font-medium text-white/90">
+                    {value}
+                  </div>
                 </div>
               ))}
             </div>
@@ -193,9 +195,10 @@ export default function AboutPage() {
               Fixly vs calling a handyman
             </h2>
             <p className="mt-8 text-lg leading-relaxed text-[var(--muted)]">
-              Fixly is ideal for small and medium repairs, while pros are best for
-              dangerous or complex work. We always call out when to bring in a
-              licensed expert for gas, serious electrical, or major water issues.
+              Fixly is ideal for small and medium repairs, while pros are best
+              for dangerous or complex work. We always call out when to bring in
+              a licensed expert for gas, serious electrical, or major water
+              issues.
             </p>
           </div>
 
@@ -219,7 +222,9 @@ export default function AboutPage() {
                   </li>
                   <li className="flex items-start gap-4">
                     <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--accent)] shadow-[0_0_8px_var(--accent)]" />
-                    <span>Learn skills and fix it yourself with confidence.</span>
+                    <span>
+                      Learn skills and fix it yourself with confidence.
+                    </span>
                   </li>
                   <li className="flex items-start gap-4">
                     <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--accent)] shadow-[0_0_8px_var(--accent)]" />
@@ -229,7 +234,9 @@ export default function AboutPage() {
               </div>
             </div>
             <div className="rounded-[2.5rem] border border-white/5 bg-white/[0.02] p-10 shadow-xl transition-all duration-300 hover:border-white/10">
-              <div className="text-xl font-semibold text-white/90">Pro handyman</div>
+              <div className="text-xl font-semibold text-white/90">
+                Pro handyman
+              </div>
               <ul className="mt-8 space-y-5 text-[15px] text-white/40">
                 <li className="flex items-start gap-4">
                   <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-white/10" />
@@ -266,7 +273,7 @@ export default function AboutPage() {
               common DIY repair assistant needs.
             </p>
           </div>
-          <div className="mt-20 rounded-[3rem] border border-white/5 bg-white/[0.02] p-10 md:p-16 shadow-2xl backdrop-blur-sm">
+          <div className="mt-20 rounded-[3rem] border border-white/5 bg-white/[0.02] p-10 shadow-2xl backdrop-blur-sm md:p-16">
             <div className="grid gap-x-16 gap-y-12 sm:grid-cols-2 lg:grid-cols-3">
               {[
                 {

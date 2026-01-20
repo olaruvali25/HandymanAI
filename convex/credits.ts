@@ -7,7 +7,11 @@ import {
   mutation,
   type MutationCtx,
 } from "./_generated/server";
-import { getMonthlyCreditsForPlan, planSchema, type Plan } from "./billingConfig";
+import {
+  getMonthlyCreditsForPlan,
+  planSchema,
+  type Plan,
+} from "./billingConfig";
 import {
   findLedgerEntryByStripeEventId,
   insertLedgerEntry,
@@ -352,7 +356,7 @@ export const updateSubscriptionStatus = internalMutation({
       pendingDowngradePlan:
         args.pendingDowngradePlan === null
           ? undefined
-          : args.pendingDowngradePlan ?? user.pendingDowngradePlan,
+          : (args.pendingDowngradePlan ?? user.pendingDowngradePlan),
       stripeCustomerId: args.stripeCustomerId ?? user.stripeCustomerId,
       stripeSubscriptionId:
         args.stripeSubscriptionId ?? user.stripeSubscriptionId,

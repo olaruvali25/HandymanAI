@@ -215,20 +215,6 @@ export default function ProfilePage() {
               </CardContent>
             </Card>
 
-            <Card className="border-[var(--border)] bg-[var(--bg-elev)]/60">
-              <CardHeader>
-                <CardTitle className="text-white">Security</CardTitle>
-                <CardDescription>Update your sign-in details.</CardDescription>
-              </CardHeader>
-              <CardContent className="flex flex-wrap items-center justify-between gap-4 text-sm text-white/80">
-                <div className="text-[var(--muted)]">
-                  Password changes are available for password accounts.
-                </div>
-                <Button variant="outline" disabled>
-                  Change password
-                </Button>
-              </CardContent>
-            </Card>
           </div>
         </div>
       </Container>

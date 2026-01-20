@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
-
 import HomePageClient from "./_components/home-page-client";
+import CameraCaptureExample from "./_components/camera-capture-example";
 
 export const metadata: Metadata = {
   title: "Home Repair Help, Fast",
@@ -9,5 +9,10 @@ export const metadata: Metadata = {
 };
 
 export default function HomePage() {
-  return <HomePageClient />;
+  return (
+    <>
+      <HomePageClient />
+      <CameraCaptureExample />
+    </>
+  );
 }

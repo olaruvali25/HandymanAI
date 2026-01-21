@@ -60,7 +60,7 @@ export default function Navbar() {
             setCredits(data.entitlements.credits);
           }
         })
-        .catch(() => { });
+        .catch(() => {});
     };
     refreshCredits();
     window.addEventListener("focus", refreshCredits);

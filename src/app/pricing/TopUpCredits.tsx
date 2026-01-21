@@ -105,58 +105,58 @@ export default function TopUpCredits() {
 
       {showAuthModal && typeof document !== "undefined"
         ? createPortal(
-          <div className="fixed inset-0 z-[60] flex items-center justify-center px-4">
-            <div
-              className="absolute inset-0 bg-black/70 backdrop-blur-sm"
-              onClick={() => setShowAuthModal(false)}
-            />
-            <div className="relative z-10 w-full max-w-md overflow-hidden rounded-3xl border border-white/10 bg-[var(--bg-elev)]/90 text-white shadow-[0_30px_80px_-40px_rgba(0,0,0,0.9)]">
-              <div className="flex items-center justify-between border-b border-white/10 px-6 py-4">
-                <div className="text-xs font-bold tracking-[0.3em] text-[var(--muted)] uppercase">
-                  Purchase
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setShowAuthModal(false)}
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/10 text-white/70 transition hover:border-white/30 hover:text-white"
-                  aria-label="Close"
-                >
-                  ✕
-                </button>
-              </div>
-              <div className="px-6 py-6">
-                <div className="text-lg font-semibold text-white">
-                  Log in to buy credits
-                </div>
-                <p className="mt-2 text-sm text-[var(--muted)]">
-                  Log in or create an account to continue.
-                </p>
-                <div className="mt-6 grid gap-3 sm:grid-cols-3">
-                  <Link
-                    href="/login"
-                    className="inline-flex items-center justify-center rounded-full border border-white/10 bg-white/10 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/20"
-                  >
-                    Login
-                  </Link>
-                  <Link
-                    href="/signup"
-                    className="inline-flex items-center justify-center rounded-full bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-black transition hover:bg-[var(--accent)]/90"
-                  >
-                    Sign up
-                  </Link>
+            <div className="fixed inset-0 z-[60] flex items-center justify-center px-4">
+              <div
+                className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+                onClick={() => setShowAuthModal(false)}
+              />
+              <div className="relative z-10 w-full max-w-md overflow-hidden rounded-3xl border border-white/10 bg-[var(--bg-elev)]/90 text-white shadow-[0_30px_80px_-40px_rgba(0,0,0,0.9)]">
+                <div className="flex items-center justify-between border-b border-white/10 px-6 py-4">
+                  <div className="text-xs font-bold tracking-[0.3em] text-[var(--muted)] uppercase">
+                    Purchase
+                  </div>
                   <button
                     type="button"
                     onClick={() => setShowAuthModal(false)}
-                    className="inline-flex items-center justify-center rounded-full border border-white/10 px-4 py-2 text-sm text-white/80 transition hover:bg-white/5"
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/10 text-white/70 transition hover:border-white/30 hover:text-white"
+                    aria-label="Close"
                   >
-                    Not now
+                    ✕
                   </button>
                 </div>
+                <div className="px-6 py-6">
+                  <div className="text-lg font-semibold text-white">
+                    Log in to buy credits
+                  </div>
+                  <p className="mt-2 text-sm text-[var(--muted)]">
+                    Log in or create an account to continue.
+                  </p>
+                  <div className="mt-6 grid gap-3 sm:grid-cols-3">
+                    <Link
+                      href="/login"
+                      className="inline-flex items-center justify-center rounded-full border border-white/10 bg-white/10 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/20"
+                    >
+                      Login
+                    </Link>
+                    <Link
+                      href="/signup"
+                      className="inline-flex items-center justify-center rounded-full bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-black transition hover:bg-[var(--accent)]/90"
+                    >
+                      Sign up
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={() => setShowAuthModal(false)}
+                      className="inline-flex items-center justify-center rounded-full border border-white/10 px-4 py-2 text-sm text-white/80 transition hover:bg-white/5"
+                    >
+                      Not now
+                    </button>
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>,
-          document.body,
-        )
+            </div>,
+            document.body,
+          )
         : null}
     </div>
   );

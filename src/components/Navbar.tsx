@@ -60,7 +60,7 @@ export default function Navbar() {
             setCredits(data.entitlements.credits);
           }
         })
-        .catch(() => {});
+        .catch(() => { });
     };
     refreshCredits();
     window.addEventListener("focus", refreshCredits);
@@ -95,6 +95,9 @@ export default function Navbar() {
             </Link>
             <Link className="transition hover:text-white" href="/about">
               About
+            </Link>
+            <Link className="transition hover:text-white" href="/help">
+              Help
             </Link>
           </nav>
           <div className="flex items-center gap-3 text-sm">

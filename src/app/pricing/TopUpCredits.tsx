@@ -1,7 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
-import { useAction } from "convex/react";
+import { useAction, useConvexAuth } from "convex/react";
 import { api } from "@convex/_generated/api";
 
 const creditOptions = Array.from({ length: 15 }, (_, i) => (i + 1) * 100);
@@ -12,6 +13,8 @@ export default function TopUpCredits() {
   const price = useMemo(() => (credits / 100) * pricePer100, [credits]);
   const createCheckout = useAction(api.stripe.createTopupCheckoutSession);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const { isAuthenticated } = useConvexAuth();
+  const [showAuthModal, setShowAuthModal] = useState(false);
 
   const canCheckout = true;
 
@@ -76,6 +79,10 @@ export default function TopUpCredits() {
           type="button"
           onClick={async () => {
             if (!canCheckout || isSubmitting) return;
+            if (!isAuthenticated) {
+              setShowAuthModal(true);
+              return;
+            }
             setIsSubmitting(true);
             try {
               const paymentUrl = await createCheckout({ credits });
@@ -94,6 +101,42 @@ export default function TopUpCredits() {
           {isSubmitting ? "Redirecting..." : "Add credits"}
         </button>
       </div>
+
+      {showAuthModal ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+          <div
+            className="absolute inset-0 bg-black/60"
+            onClick={() => setShowAuthModal(false)}
+          />
+          <div className="relative z-10 w-full max-w-md rounded-2xl border border-white/10 bg-[var(--bg-elev)]/95 p-6 text-white shadow-2xl">
+            <div className="text-lg font-semibold">Log in to buy credits</div>
+            <p className="mt-2 text-sm text-[var(--muted)]">
+              Log in or create an account to finish your purchase.
+            </p>
+            <div className="mt-6 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setShowAuthModal(false)}
+                className="rounded-full border border-white/10 px-4 py-2 text-sm text-white/80 hover:bg-white/5"
+              >
+                Not now
+              </button>
+              <Link
+                href="/login"
+                className="rounded-full border border-white/10 bg-white/10 px-4 py-2 text-sm font-semibold text-white hover:bg-white/20"
+              >
+                Login
+              </Link>
+              <Link
+                href="/signup"
+                className="rounded-full bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-black hover:bg-[var(--accent)]/90"
+              >
+                Sign up
+              </Link>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -64,3 +64,74 @@ Use Bun locally for all commands:
 - Never commit secrets. Use `.env.local` for local values and keep `.env.example` up to date.
 - Required: `NEXT_PUBLIC_CONVEX_URL`; optional: `OPENAI_API_KEY` and `OPENAI_MODEL` (see `src/env.ts`).
 - Avoid committing build artifacts like `.next/` and dependencies like `node_modules/`.
+
+# Architecture Overview
+
+## System Design
+
+HandymanAI is a full-stack Next.js + Convex application with:
+- **Frontend:** Next.js App Router, React 19, Tailwind CSS 4, shadcn/ui
+- **Backend:** Convex (real-time database + serverless functions)
+- **AI:** OpenAI API (text + vision models)
+- **Auth:** Convex Auth with password + Google/Facebook OAuth
+- **State management:** Zustand (user preferences), TanStack Query (server state), @assistant-ui/react (chat runtime)
+
+## Critical Data Flows
+
+### Chat Flow (Core User Experience)
+1. User sends message via `src/components/chat/GrokThread.tsx`
+2. Message posted to `POST /api/ai` (Next.js route handler)
+3. Server validates credits via `convex/entitlements.ts`
+4. OpenAI API called with two-stage prompt (scope-control + primary)
+5. Response streamed back as Server-Sent Events
+6. Chat history persisted to Convex `chatThreads` and `chatMessages` tables
+
+### Guest → User Identity Merge
+- Guests store anonymous ID in `fixly_anon` cookie
+- On signup/login: `convex/entitlements.ts` (`syncAnonymousToUser`) merges credits and chat threads
+- Critical: Check both `anonymousUsers` and `users` tables when querying entitlements
+
+### Credits System
+- User credits: `users.credits` (primary table)
+- Anonymous credits: `anonymousUsers.credits`
+- Charges tracked in `creditCharges` table (indexed by user/anonymous + turnId + stage)
+- Two-stage charging: "user" stage (1-16 credits based on attachments) + "assistant" stage (2-7 credits)
+- Lookup by turnId prevents double-charging on retries
+
+## Key Implementation Patterns
+
+### OpenAI Integration
+- Base model: `env.OPENAI_MODEL` (defaults to "gpt-5.2")
+- Vision: Auto-downgrades to "gpt-4o-mini" if attachments present and base model lacks vision
+- Prompts: Loaded from `src/ai/prompts/` (scope-control.txt, primary.txt)
+- Scope caching: 6-hour TTL cache (BoundedMap) to avoid re-prompting for thread context
+
+### Authentication
+- Session state in cookie + Convex Auth
+- Routes protected via `middleware.ts` (checks `/tasks/*`)
+- Client-side: `ConvexAuthNextjsServerProvider` (server) + `ConvexAuthNextjsProvider` (client)
+- Auth routes: `src/app/api/auth/route.ts` (session) + `src/app/api/auth/[...auth]/route.ts` (OAuth proxy)
+
+### Chat History Persistence
+- Uses Convex queries directly (not via `/api/ai`)
+- Functions in `convex/chatHistory.ts`
+- Threads indexed by userId or anonymousId; messages indexed by threadId + createdAt
+- Supports both authenticated users and guests (via guestChatId)
+
+## Common Debugging Entry Points
+
+- **Auth issues:** Check `middleware.ts` → `convex/auth.ts` → `src/app/api/auth/route.ts`
+- **Credits mismatch:** Verify `reserveCredits` → `chargeAssistantCredits` flow; check `creditCharges` table for duplicate entries
+- **Chat not showing:** Verify `listThreadsForUser` / `listThreadsForActor` queries; check `chatMessages` indexed query
+- **Streaming vs. non-streaming:** Control via `FIXLY_DISABLE_STREAMING` env var; both paths in `src/app/api/ai/route.ts` must be kept in sync
+
+## Entitlements & Capabilities
+
+User capabilities determined by plan and returned as `ClientEntitlements` object:
+- `userHasAccount`: boolean
+- `userPlan`: "none" | "premium" | (other tiers)
+- `credits`: number (optional)
+- `capabilities`: object with `voice`, `photos`, `linksVisuals`, `history`, `favorites`, `photoLimit`, `premiumVisuals`
+- Gating: flags to prompt signup/payment after certain actions
+
+Update logic lives in `src/lib/schemas/entitlements.ts` and flows through `src/app/api/ai/route.ts` on every request.

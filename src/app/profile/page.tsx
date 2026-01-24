@@ -8,6 +8,8 @@ import { useEntitlementsQuery } from "@/lib/queries/entitlements";
 import { api } from "@convex/_generated/api";
 import Container from "@/components/Container";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Spinner } from "@/components/ui/spinner";
 import {
   Card,
   CardContent,
@@ -83,6 +85,42 @@ export default function ProfilePage() {
               >
                 Log in
               </Link>
+            </div>
+          </div>
+        </Container>
+      </div>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <div className="bg-[var(--bg)]">
+        <Container>
+          <div className="py-12">
+            <div className="flex items-center gap-3">
+              <h1 className="font-display text-4xl font-semibold text-white">
+                Profile
+              </h1>
+              <Spinner className="text-[var(--accent)]" />
+            </div>
+
+            <div className="mt-8 grid gap-6">
+              {Array.from({ length: 4 }).map((_, index) => (
+                <Card
+                  key={`profile-skeleton-${index}`}
+                  className="border-[var(--border)] bg-[var(--bg-elev)]/60"
+                >
+                  <CardHeader>
+                    <Skeleton className="h-5 w-32 bg-white/10" />
+                    <Skeleton className="h-4 w-64 bg-white/10" />
+                  </CardHeader>
+                  <CardContent className="grid gap-3">
+                    <Skeleton className="h-4 w-full bg-white/10" />
+                    <Skeleton className="h-4 w-5/6 bg-white/10" />
+                    <Skeleton className="h-4 w-2/3 bg-white/10" />
+                  </CardContent>
+                </Card>
+              ))}
             </div>
           </div>
         </Container>

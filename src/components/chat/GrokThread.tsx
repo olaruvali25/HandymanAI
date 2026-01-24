@@ -12,6 +12,9 @@ import {
   useRef,
   useState,
   type ChangeEvent,
+  type CSSProperties,
+  type Dispatch,
+  type SetStateAction,
 } from "react";
 import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import type { Id } from "@convex/_generated/dataModel";
@@ -32,8 +35,40 @@ import {
   type ThreadMessage,
 } from "@assistant-ui/react";
 import {
+  Sidebar,
+  SidebarContent,
+  SidebarHeader,
+  SidebarInset,
+  SidebarInput,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuSkeleton,
+  SidebarMenuItem,
+  SidebarProvider,
+  SidebarRail,
+  SidebarSeparator,
+  SidebarTrigger,
+  useSidebar,
+} from "@/components/ui/sidebar";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
+import ShimmerText from "@/components/kokonutui/shimmer-text";
+import {
   CHAT_MAX_IMAGE_ATTACHMENT_BYTES,
   type ChatAttachment,
+  type ChatMessageAction,
   type ChatMessageRole,
 } from "@/lib/schemas/chat";
 import {
@@ -45,6 +80,8 @@ import {
   useEntitlementsQuery,
 } from "@/lib/queries/entitlements";
 import { useUserPreferencesStore } from "@/lib/stores/user-preferences";
+import { env } from "@/env";
+import { cn } from "@/lib/utils";
 
 type SpeechRecognitionResultLike = {
   transcript?: string;
@@ -87,6 +124,7 @@ type HistoryMessage = {
   contentText: string;
   createdAt: number;
   attachments?: ChatAttachment[];
+  actions?: ChatMessageAction[];
 };
 
 const defaultEntitlements: Entitlements = {
@@ -110,12 +148,120 @@ const defaultEntitlements: Entitlements = {
   },
 };
 
-type ActionItem = {
-  type: "link";
-  label: string;
-  href: string;
-  variant?: "primary" | "secondary";
-};
+const PremiumBackground = () => (
+  <div className="mesh-container">
+    <div
+      className="mesh-blob animate-mesh bg-[rgba(255,122,26,0.18)]"
+      style={{
+        width: "50%",
+        height: "60%",
+        top: "-10%",
+        left: "25%",
+        animationDelay: "0s",
+      }}
+    />
+    <div
+      className="mesh-blob animate-mesh bg-[rgba(59,198,255,0.12)]"
+      style={{
+        width: "40%",
+        height: "50%",
+        bottom: "-10%",
+        left: "-5%",
+        animationDelay: "-5s",
+      }}
+    />
+    <div
+      className="mesh-blob animate-mesh bg-[rgba(255,198,120,0.1)]"
+      style={{
+        width: "45%",
+        height: "45%",
+        top: "20%",
+        right: "-10%",
+        animationDelay: "-10s",
+      }}
+    />
+  </div>
+);
+
+const FixlyLogo = ({ className }: { className?: string }) => (
+  <div className={cn("flex items-center gap-3", className)}>
+    <div className="flex h-12 w-12 rotate-3 items-center justify-center rounded-2xl bg-gradient-to-br from-[var(--accent)] to-[var(--accent-soft)] shadow-[var(--accent)]/20 shadow-lg">
+      <WrenchIcon className="h-7 w-7 -rotate-3 text-white" />
+    </div>
+    <div className="flex flex-col text-left">
+      <span className="font-display text-2xl font-bold tracking-tight text-[var(--text)]">
+        Fixly
+      </span>
+      <span className="mt-1 text-[10px] leading-none font-bold tracking-[0.2em] text-[var(--accent)] uppercase opacity-80">
+        Handyman AI
+      </span>
+    </div>
+  </div>
+);
+
+const EmptyStateHero = ({
+  onSuggestionClick,
+}: {
+  onSuggestionClick?: (text: string) => void;
+}) => (
+  <div className="animate-in fade-in zoom-in relative z-10 flex flex-col items-center justify-center px-6 text-center duration-700">
+    <FixlyLogo className="mb-12" />
+    <h1 className="font-display max-w-xl text-4xl leading-tight font-semibold text-[var(--text)] md:text-5xl">
+      What can I help you <span className="text-[var(--accent)]">fix</span>{" "}
+      today?
+    </h1>
+    <p className="mt-6 max-w-lg text-lg text-[var(--muted)] opacity-80">
+      Snap a photo or describe the issue. From leaky faucets to broken
+      appliances, I'm here to guide you.
+    </p>
+
+    <div className="mt-12 flex flex-wrap justify-center gap-3 opacity-90">
+      {[
+        "Broken dishwasher",
+        "Leaking pipe",
+        "Wobbly chair",
+        "Light switch help",
+      ].map((suggestion) => (
+        <button
+          key={suggestion}
+          type="button"
+          onClick={() => onSuggestionClick?.(suggestion)}
+          className="cursor-pointer rounded-full border border-[var(--border)] bg-[var(--surface)]/40 px-5 py-2.5 text-sm font-medium text-[var(--text)] transition-all hover:scale-105 hover:border-[var(--accent)]/50 hover:bg-[var(--surface)]"
+        >
+          {suggestion}
+        </button>
+      ))}
+    </div>
+  </div>
+);
+
+const ThreadMessageSkeleton = ({ isUser }: { isUser?: boolean }) => (
+  <div
+    className={cn(
+      "flex w-full animate-pulse flex-col gap-2 py-4",
+      isUser ? "items-end" : "items-start",
+    )}
+  >
+    <div
+      className={cn("h-4 rounded-lg bg-white/5", isUser ? "w-2/3" : "w-3/4")}
+    />
+    <div
+      className={cn("h-4 rounded-lg bg-white/5", isUser ? "w-1/2" : "w-2/3")}
+    />
+    {!isUser && <div className="h-4 w-1/2 rounded-lg bg-white/5" />}
+  </div>
+);
+
+const ThreadLoadingState = () => (
+  <div className="mx-auto flex w-full max-w-3xl flex-col gap-4 px-4 pt-4 pb-6">
+    <ThreadMessageSkeleton isUser />
+    <ThreadMessageSkeleton />
+    <ThreadMessageSkeleton isUser />
+    <ThreadMessageSkeleton />
+  </div>
+);
+
+type ActionItem = ChatMessageAction;
 
 type MessageActions = {
   actions: ActionItem[];
@@ -149,6 +295,19 @@ const EntitlementsContext = createContext<{
 });
 
 const useEntitlements = () => useContext(EntitlementsContext);
+
+const ImageViewerContext = createContext<{
+  openImage: (url: string, name?: string) => void;
+} | null>(null);
+
+const useImageViewer = () => {
+  const context = useContext(ImageViewerContext);
+  return (
+    context ?? {
+      openImage: () => {},
+    }
+  );
+};
 
 const extractText = (message: ThreadMessage) => {
   if (typeof message.content === "string") return message.content;
@@ -495,103 +654,117 @@ const buildGuestChatId = () => {
   return `guest-${Date.now()}`;
 };
 
-function CameraIcon() {
+const CameraIcon = ({ className }: { className?: string }) => (
+  <svg
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className={cn("h-5 w-5", className)}
+  >
+    <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z" />
+    <circle cx="12" cy="13" r="3" />
+  </svg>
+);
+
+const MicIcon = ({ className }: { className?: string }) => (
+  <svg
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className={cn("h-5 w-5", className)}
+  >
+    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+    <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+    <line x1="12" y1="19" x2="12" y2="23" />
+    <line x1="8" y1="23" x2="16" y2="23" />
+  </svg>
+);
+
+const ArrowUpIcon = ({ className }: { className?: string }) => (
+  <svg
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2.5"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className={cn("h-5 w-5", className)}
+  >
+    <polyline points="18 15 12 9 6 15" />
+  </svg>
+);
+
+const SquareIcon = ({ className }: { className?: string }) => (
+  <svg
+    viewBox="0 0 24 24"
+    fill="currentColor"
+    className={cn("h-4 w-4", className)}
+  >
+    <rect x="7" y="7" width="10" height="10" rx="2" />
+  </svg>
+);
+
+const CloseIcon = ({ className }: { className?: string }) => (
+  <svg
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.8"
+    className={cn("h-4 w-4", className)}
+  >
+    <path d="M6 6l12 12" />
+    <path d="M18 6l-12 12" />
+  </svg>
+);
+
+function WrenchIcon({ className }: { className?: string }) {
   return (
     <svg
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth="1.8"
-      className="h-5 w-5"
+      strokeWidth="2.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={cn("h-5 w-5", className)}
     >
-      <path d="M4 7h3l1.5-2h7L17 7h3a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2Z" />
-      <circle cx="12" cy="13" r="3.25" />
+      <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
     </svg>
   );
 }
 
-function MicIcon() {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      className="h-5 w-5"
-    >
-      <path d="M12 3a3 3 0 0 1 3 3v5a3 3 0 0 1-6 0V6a3 3 0 0 1 3-3Z" />
-      <path d="M5 11a7 7 0 0 0 14 0" />
-      <path d="M12 18v3" />
-    </svg>
-  );
-}
+const PlusIcon = ({ className }: { className?: string }) => (
+  <svg
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2.5"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className={cn("h-5 w-5", className)}
+  >
+    <line x1="12" y1="5" x2="12" y2="19" />
+    <line x1="5" y1="12" x2="19" y2="12" />
+  </svg>
+);
 
-function ArrowUpIcon() {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      className="h-5 w-5"
-    >
-      <path d="M12 5v14" />
-      <path d="m5 12 7-7 7 7" />
-    </svg>
-  );
-}
-
-function SquareIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4">
-      <rect x="7" y="7" width="10" height="10" rx="2" />
-    </svg>
-  );
-}
-
-function CloseIcon() {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      className="h-4 w-4"
-    >
-      <path d="M6 6l12 12" />
-      <path d="M18 6l-12 12" />
-    </svg>
-  );
-}
-
-function PlusIcon() {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      className="h-5 w-5"
-    >
-      <path d="M12 5v14" />
-      <path d="M5 12h14" />
-    </svg>
-  );
-}
-
-function AttachmentIcon() {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      className="h-5 w-5"
-    >
-      <path d="M12 6v9a3 3 0 0 1-6 0V7a5 5 0 0 1 10 0v8a7 7 0 0 1-14 0V8" />
-    </svg>
-  );
-}
+const AttachmentIcon = ({ className }: { className?: string }) => (
+  <svg
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.8"
+    className={cn("h-5 w-5", className)}
+  >
+    <path d="M12 6v9a3 3 0 0 1-6 0V7a5 5 0 0 1 10 0v8a7 7 0 0 1-14 0V8" />
+  </svg>
+);
 
 const formatFileSize = (size?: number) => {
   if (!size || !Number.isFinite(size)) return "";
@@ -636,6 +809,7 @@ const getUiAttachments = (
 
 const ChatMessage = () => {
   const { messageActions } = useEntitlements();
+  const { openImage } = useImageViewer();
   const role = useAssistantState((state) => state.message.role);
   const isUser = role === "user";
   const status = useAssistantState((state) => state.message.status);
@@ -669,40 +843,74 @@ const ChatMessage = () => {
         .join("\n")
     : "";
 
+  const isImageOnly =
+    imageAttachments.length > 0 &&
+    fileAttachments.length === 0 &&
+    textContent.trim().length === 0;
+
+  const isEmptyAssistant =
+    role === "assistant" &&
+    textContent.trim().length === 0 &&
+    attachments.length === 0;
+
+  if (isEmptyAssistant) return null;
+
   return (
-    <MessagePrimitive.Root className="px-4 py-2">
+    <MessagePrimitive.Root
+      className={cn("px-4", isImageOnly ? "py-1" : "py-2")}
+    >
       <div
         className={`flex w-full ${isUser ? "justify-end" : "justify-start"}`}
       >
         <div
-          className={`max-w-[85%] rounded-2xl px-5 py-3 text-left shadow-sm ${
-            isUser
-              ? "bg-[var(--accent)] text-white"
-              : isError
-                ? "border border-red-500/40 bg-red-500/10 text-sm text-red-100"
-                : "border border-[var(--border)] bg-[var(--bg-elev)] text-base text-[var(--text)]"
-          }`}
+          className={
+            isImageOnly
+              ? "inline-flex max-w-[85%] flex-col gap-2 text-left"
+              : `max-w-[85%] rounded-2xl px-5 py-3 text-left shadow-sm ${
+                  isUser
+                    ? "bg-[var(--accent)] text-white"
+                    : isError
+                      ? "border border-red-500/40 bg-red-500/10 text-sm text-red-100"
+                      : "border border-[var(--border)] bg-[var(--bg-elev)] text-base text-[var(--text)]"
+                }`
+          }
         >
           <div className="flex flex-col gap-3">
             {imageAttachments.length > 0 && (
-              <div className="grid grid-cols-3 gap-2">
+              <div
+                className={
+                  isImageOnly
+                    ? "flex flex-wrap gap-2"
+                    : "grid grid-cols-3 gap-2"
+                }
+              >
                 {imageAttachments.map((image) => (
-                  <a
+                  <button
                     key={image.id}
-                    href={image.previewUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="block"
+                    type="button"
+                    onClick={() =>
+                      image.previewUrl
+                        ? openImage(image.previewUrl, image.name)
+                        : null
+                    }
+                    className={cn(
+                      "block cursor-pointer overflow-hidden rounded-lg",
+                      isImageOnly && "h-24 w-24",
+                    )}
+                    aria-label={`Open ${image.name}`}
                   >
                     <Image
                       src={image.previewUrl ?? ""}
                       alt={image.name}
                       width={220}
                       height={220}
-                      className="h-24 w-full rounded-lg object-cover"
+                      className={cn(
+                        "rounded-lg object-cover",
+                        isImageOnly ? "h-24 w-24" : "h-24 w-full",
+                      )}
                       unoptimized
                     />
-                  </a>
+                  </button>
                 ))}
               </div>
             )}
@@ -775,7 +983,11 @@ const TypingIndicator = () => {
 
   return (
     <div className="px-4 py-2">
-      <div className="flex w-full justify-start">
+      <div className="flex w-full flex-col items-start gap-2">
+        <ShimmerText
+          text="Processing your request..."
+          className="from-(--accent)! via-(--accent-soft)! to-(--accent)! bg-size-[200%_100%]! text-xs! font-semibold!"
+        />
         <div className="typing-bubble max-w-[85%] rounded-2xl border border-[var(--border)] bg-[var(--bg-elev)] px-5 py-3 text-[var(--text)]">
           <div className="typing-dots">
             <span className="typing-dot" />
@@ -789,8 +1001,10 @@ const TypingIndicator = () => {
 };
 
 type ComposerProps = {
-  selectedFile: File | null;
-  setSelectedFile: (file: File | null) => void;
+  selectedFiles: File[];
+  setSelectedFiles: Dispatch<SetStateAction<File[]>>;
+  draft: string;
+  setDraft: (value: string) => void;
   selectedLanguage: string;
   setSelectedLanguage: (value: string) => void;
   lastUserText: string;
@@ -803,8 +1017,10 @@ type ComposerProps = {
 };
 
 const Composer = ({
-  selectedFile,
-  setSelectedFile,
+  selectedFiles,
+  setSelectedFiles,
+  draft,
+  setDraft,
   selectedLanguage,
   setSelectedLanguage,
   lastUserText,
@@ -816,26 +1032,55 @@ const Composer = ({
   canPhotos,
 }: ComposerProps) => {
   const api = useAssistantApi();
-  const isEmpty = useAssistantState((state) => state.composer.isEmpty);
+  const { openImage } = useImageViewer();
   const isRunning = useAssistantState((state) => state.thread.isRunning);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const cameraInputRef = useRef<HTMLInputElement | null>(null);
   const speechRef = useRef<SpeechRecognitionLike | null>(null);
   const baseTextRef = useRef<string>("");
+  const draftRef = useRef<string>(draft);
   const shouldListenRef = useRef(false);
   const [isListening, setIsListening] = useState(false);
   const [micError, setMicError] = useState<string | null>(null);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const previewUrl = useMemo(() => {
-    if (!selectedFile) return null;
-    if (!selectedFile.type.startsWith("image/")) return null;
-    return URL.createObjectURL(selectedFile);
-  }, [selectedFile]);
+  const [isPopoverReady, setIsPopoverReady] = useState(false);
+  const filesWithIndex = useMemo(
+    () => selectedFiles.map((file, index) => ({ file, index })),
+    [selectedFiles],
+  );
+  const imageItems = useMemo(
+    () => filesWithIndex.filter(({ file }) => file.type.startsWith("image/")),
+    [filesWithIndex],
+  );
+  const otherItems = useMemo(
+    () => filesWithIndex.filter(({ file }) => !file.type.startsWith("image/")),
+    [filesWithIndex],
+  );
+  const [imagePreviews, setImagePreviews] = useState<
+    Array<{ index: number; url: string; name: string }>
+  >([]);
 
   useEffect(() => {
-    if (!previewUrl) return;
-    return () => URL.revokeObjectURL(previewUrl);
-  }, [previewUrl]);
+    const next = imageItems.map(({ file, index }) => ({
+      index,
+      name: file.name,
+      url: URL.createObjectURL(file),
+    }));
+    setImagePreviews(next);
+    return () => {
+      next.forEach((preview) => URL.revokeObjectURL(preview.url));
+    };
+  }, [imageItems]);
+
+  useEffect(() => {
+    draftRef.current = draft;
+  }, [draft]);
+
+  useEffect(() => {
+    setIsPopoverReady(true);
+  }, []);
+
+  const isEmpty = !draft.trim() && selectedFiles.length === 0;
 
   const handleCameraClick = () => {
     if (!canPhotos) return;
@@ -847,17 +1092,25 @@ const Composer = ({
     fileInputRef.current?.click();
   };
 
+  const addFiles = (files: File[]) => {
+    if (files.length === 0) return;
+    setSelectedFiles((prev) => [...prev, ...files]);
+  };
+
   const handleCameraChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    if (!file.type.startsWith("image/")) return;
-    setSelectedFile(file);
+    const files = Array.from(event.target.files ?? []).filter((file) =>
+      file.type.startsWith("image/"),
+    );
+    if (files.length === 0) return;
+    addFiles(files);
+    event.target.value = "";
   };
 
   const handleAttachmentChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    setSelectedFile(file);
+    const files = Array.from(event.target.files ?? []);
+    if (files.length === 0) return;
+    addFiles(files);
+    event.target.value = "";
   };
 
   useEffect(() => {
@@ -876,7 +1129,7 @@ const Composer = ({
     recognition.continuous = true;
 
     recognition.onstart = () => {
-      baseTextRef.current = api.composer().getState().text || "";
+      baseTextRef.current = draftRef.current || "";
       setIsListening(true);
     };
 
@@ -890,7 +1143,7 @@ const Composer = ({
 
       const base = baseTextRef.current.trimEnd();
       const next = `${base}${base ? " " : ""}${transcript.trim()}`;
-      api.composer().setText(next);
+      setDraft(next);
     };
 
     recognition.onerror = () => {
@@ -944,22 +1197,26 @@ const Composer = ({
   };
 
   const handleRemoveFile = () => {
-    setSelectedFile(null);
+    setSelectedFiles([]);
+  };
+
+  useEffect(() => {
+    if (selectedFiles.length > 0) return;
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
     if (cameraInputRef.current) {
       cameraInputRef.current.value = "";
     }
-  };
+  }, [selectedFiles.length]);
 
   const buildUserContent = async (
     text: string,
-    file: File | null,
+    files: File[],
   ): Promise<ThreadUserMessagePart[]> => {
     const content: ThreadUserMessagePart[] = [];
 
-    if (file) {
+    for (const file of files) {
       if (file.type.startsWith("image/")) {
         const base64 = await new Promise<string>((resolve) => {
           const reader = new FileReader();
@@ -994,223 +1251,332 @@ const Composer = ({
   };
 
   return (
-    <ComposerPrimitive.Root
-      className="group/composer mx-auto w-full max-w-3xl px-4"
-      data-empty={isEmpty}
-      data-running={isRunning}
-    >
-      {selectedFile && (
-        <div className="mb-4 flex items-center justify-between rounded-xl border border-[var(--border)] bg-[var(--bg-elev)] px-4 py-3 text-sm text-[var(--text)] shadow-lg">
-          <div className="flex items-center gap-3">
-            {previewUrl ? (
-              <Image
-                src={previewUrl}
-                alt="Selected preview"
-                width={48}
-                height={48}
-                className="h-12 w-12 rounded-lg object-cover"
-                unoptimized
-              />
-            ) : (
-              <div className="flex h-12 w-12 items-center justify-center rounded-lg border border-[var(--border)] text-[var(--muted)]">
-                <AttachmentIcon />
+    <>
+      <ComposerPrimitive.Root
+        className="group/composer glass-panel-heavy hover:shadow-soft mx-auto mb-6 w-full max-w-3xl overflow-hidden rounded-[32px] p-2 transition-all"
+        data-empty={isEmpty}
+        data-running={isRunning}
+      >
+        {selectedFiles.length > 0 && (
+          <div className="animate-in slide-in-from-bottom-4 mx-2 mb-2 flex flex-col gap-3 rounded-[24px] bg-[var(--bg)]/40 p-4 duration-300">
+            {imagePreviews.length > 0 && (
+              <div className="flex flex-wrap gap-2.5">
+                {imagePreviews.map((preview) => (
+                  <div
+                    key={`${preview.index}-${preview.url}`}
+                    className="relative flex h-[100px] w-[100px] items-center justify-center overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)]/80 shadow-md transition-transform hover:scale-105"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => openImage(preview.url, preview.name)}
+                      className="h-full w-full cursor-pointer"
+                      aria-label={`Open ${preview.name}`}
+                    >
+                      <Image
+                        src={preview.url}
+                        alt={preview.name}
+                        width={100}
+                        height={100}
+                        className="h-full w-full object-cover"
+                        unoptimized
+                      />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setSelectedFiles((prev) =>
+                          prev.filter((_, idx) => idx !== preview.index),
+                        )
+                      }
+                      className="absolute top-1.5 right-1.5 inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded-full border border-[var(--border)] bg-black/60 text-white backdrop-blur-md transition-colors hover:bg-red-500"
+                      aria-label="Remove image"
+                    >
+                      <CloseIcon className="h-3 w-3" />
+                    </button>
+                  </div>
+                ))}
               </div>
             )}
-            <span className="max-w-[200px] truncate font-medium">
-              {selectedFile.name}
-            </span>
-          </div>
-          <button
-            type="button"
-            onClick={handleRemoveFile}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[var(--border)] text-[var(--muted)] transition hover:bg-[var(--surface)] hover:text-[var(--text)]"
-          >
-            <CloseIcon />
-          </button>
-        </div>
-      )}
-      {micError && <div className="mb-3 text-xs text-red-200">{micError}</div>}
 
-      <div className="relative flex items-end gap-3 rounded-3xl border border-[var(--border)] bg-[var(--bg-elev)]/80 p-4 shadow-2xl backdrop-blur-xl transition-all focus-within:border-[var(--accent)]/50 focus-within:ring-1 focus-within:ring-[var(--accent)]/50 hover:border-[var(--accent)]/30">
-        <button
-          type="button"
-          onClick={handleCameraClick}
-          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[var(--muted)] transition hover:bg-[var(--surface)] hover:text-[var(--text)] ${canPhotos ? "" : "cursor-not-allowed opacity-40 hover:bg-transparent"}`}
-          disabled={!canPhotos}
-        >
-          <CameraIcon />
-        </button>
-
-        <ComposerPrimitive.Input
-          placeholder="Describe the problem..."
-          className="min-h-[44px] w-full bg-transparent py-2.5 text-base text-[var(--text)] outline-none placeholder:text-[var(--muted)]"
-          onKeyDown={async (e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              const text = api.composer().getState().text.trim();
-              if (!text && !selectedFile) return;
-
-              const content = await buildUserContent(text, selectedFile);
-
-              if (content.length > 0) {
-                api.thread().append({ role: "user", content });
-                api.composer().setText("");
-                handleRemoveFile();
-              }
-            }
-          }}
-        />
-
-        <select
-          value={selectedLanguage}
-          onChange={(event) => setSelectedLanguage(event.target.value)}
-          className="h-10 rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 text-xs text-[var(--text)]"
-          aria-label="Voice language"
-        >
-          <option value="auto">Auto</option>
-          <option value="en-US">English</option>
-          <option value="es-ES">Spanish</option>
-          <option value="de-DE">German</option>
-          <option value="nl-NL">Dutch</option>
-          <option value="fr-FR">French</option>
-          <option value="pt-PT">Portuguese</option>
-          <option value="it-IT">Italian</option>
-          <option value="ro-RO">Romanian</option>
-        </select>
-
-        <div className="relative">
-          <button
-            type="button"
-            onClick={() => setIsMenuOpen(!isMenuOpen)}
-            className={`flex h-10 w-10 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--surface)] text-[var(--muted)] transition hover:border-[var(--accent)]/50 hover:text-[var(--text)] ${
-              isMenuOpen ? "border-[var(--accent)] text-[var(--text)]" : ""
-            }`}
-            aria-label="More options"
-            aria-expanded={isMenuOpen}
-          >
-            <PlusIcon />
-          </button>
-
-          {isMenuOpen && (
-            <div className="absolute right-0 bottom-full mb-2 flex w-48 flex-col gap-2 rounded-xl border border-[var(--border)] bg-[var(--bg-elev)] p-2 shadow-xl backdrop-blur-xl">
-              <button
-                type="button"
-                onClick={() => {
-                  if (canPhotos) {
-                    handleAttachmentClick();
-                    setIsMenuOpen(false);
-                  }
-                }}
-                className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-[var(--text)] transition ${canPhotos ? "hover:bg-[var(--surface)]" : "cursor-not-allowed opacity-50"}`}
-                disabled={!canPhotos}
-              >
-                <AttachmentIcon />
-                <span>Attach file</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  if (canVoice) {
-                    setSpeechEnabled(!speechEnabled);
-                  }
-                }}
-                className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-[var(--text)] transition ${canVoice ? "hover:bg-[var(--surface)]" : "cursor-not-allowed opacity-50"}`}
-                disabled={!canVoice}
-              >
-                <span
-                  className={
-                    speechEnabled
-                      ? "text-[var(--accent)]"
-                      : "text-[var(--muted)]"
-                  }
-                >
-                  {speechEnabled ? "Voice On" : "Voice Off"}
-                </span>
-              </button>
-
-              <div className="px-3 py-1">
-                <label className="mb-1.5 block text-xs font-medium text-[var(--muted)]">
-                  Voice Gender
-                </label>
-                <div className="flex gap-1 rounded-lg bg-[var(--surface)] p-1">
-                  <button
-                    type="button"
-                    onClick={() => setVoiceGender("female")}
-                    disabled={!canVoice}
-                    className={`flex-1 rounded-md py-1 text-xs font-medium transition ${
-                      voiceGender === "female"
-                        ? "bg-[var(--bg-elev)] text-[var(--text)] shadow-sm"
-                        : "text-[var(--muted)] hover:text-[var(--text)]"
-                    }`}
+            {otherItems.length > 0 && (
+              <div className="flex flex-col gap-2">
+                {otherItems.map(({ file, index }) => (
+                  <div
+                    key={`${index}-${file.name}`}
+                    className="flex items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)]/60 px-4 py-3 shadow-sm"
                   >
-                    Female
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setVoiceGender("male")}
-                    disabled={!canVoice}
-                    className={`flex-1 rounded-md py-1 text-xs font-medium transition ${
-                      voiceGender === "male"
-                        ? "bg-[var(--bg-elev)] text-[var(--text)] shadow-sm"
-                        : "text-[var(--muted)] hover:text-[var(--text)]"
-                    }`}
-                  >
-                    Male
-                  </button>
-                </div>
+                    <div className="flex min-w-0 items-center gap-3">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--bg)] text-[var(--accent)]">
+                        <AttachmentIcon />
+                      </div>
+                      <span className="truncate font-medium text-[var(--text)]">
+                        {file.name}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setSelectedFiles((prev) =>
+                          prev.filter((_, idx) => idx !== index),
+                        )
+                      }
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[var(--border)] text-[var(--muted)] transition-all hover:bg-red-500/10 hover:text-red-500"
+                      aria-label="Remove file"
+                    >
+                      <CloseIcon className="h-4 w-4" />
+                    </button>
+                  </div>
+                ))}
               </div>
+            )}
+
+            <div className="flex items-center justify-between border-t border-[var(--border)] pt-3">
+              <button
+                type="button"
+                onClick={handleRemoveFile}
+                className="text-[10px] font-bold tracking-wider text-[var(--muted)] uppercase transition-colors hover:text-[var(--accent)]"
+              >
+                Clear all files
+              </button>
+              <span className="text-[10px] text-[var(--muted)] opacity-60">
+                {selectedFiles.length} file
+                {selectedFiles.length === 1 ? "" : "s"} attached
+              </span>
             </div>
-          )}
-        </div>
+          </div>
+        )}
 
-        <div
-          className={`relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--accent)] text-white transition ${canVoice ? "hover:bg-[var(--accent-soft)]" : "opacity-50"}`}
-        >
+        {micError && (
+          <div className="animate-in slide-in-from-top-1 mx-4 mb-2 text-[10px] font-bold tracking-tight text-red-400/80 uppercase">
+            {micError}
+          </div>
+        )}
+
+        <div className="flex items-end gap-1.5 px-3 py-2.5">
           <button
             type="button"
-            onClick={handleMicClick}
-            aria-pressed={isListening}
-            className={`absolute inset-0 flex items-center justify-center transition ${
-              isListening
-                ? ""
-                : "group-data-[empty=false]/composer:scale-0 group-data-[empty=false]/composer:opacity-0"
-            }`}
-            disabled={!canVoice}
+            onClick={handleCameraClick}
+            className={cn(
+              "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-[var(--muted)] transition-all hover:bg-[var(--surface)] hover:text-[var(--text)] active:scale-95",
+              !canPhotos && "cursor-not-allowed opacity-40",
+            )}
+            disabled={!canPhotos}
+            title="Attach a photo"
           >
-            {isListening ? <SquareIcon /> : <MicIcon />}
+            <CameraIcon className="h-[22px] w-[22px]" />
           </button>
-          <button
-            type="button"
-            onClick={async () => {
-              const text = api.composer().getState().text.trim();
-              if (!text && !selectedFile) return;
 
-              const content = await buildUserContent(text, selectedFile);
+          <div className="relative flex min-h-[40px] flex-1 items-center overflow-hidden">
+            <ComposerPrimitive.Input
+              placeholder="Describe the issue..."
+              className="w-full resize-none bg-transparent px-1 py-2 text-base leading-relaxed text-[var(--text)] outline-none placeholder:text-[var(--muted)]/40"
+              submitOnEnter={false}
+              value={draft}
+              onChange={(event) => setDraft(event.target.value)}
+              onKeyDown={async (e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  const text = draft.trim();
+                  if (!text && selectedFiles.length === 0) return;
+                  const content = await buildUserContent(text, selectedFiles);
+                  if (content.length > 0) {
+                    api.thread().append({ role: "user", content });
+                    setDraft("");
+                    handleRemoveFile();
+                  }
+                }
+              }}
+            />
+          </div>
 
-              if (content.length > 0) {
-                api.thread().append({ role: "user", content });
-                api.composer().setText("");
-                handleRemoveFile();
-              }
-            }}
-            className={`absolute inset-0 flex items-center justify-center transition group-data-[empty=true]/composer:scale-0 group-data-[empty=true]/composer:opacity-0 ${
-              isListening ? "pointer-events-none scale-0 opacity-0" : ""
-            }`}
-          >
-            <ArrowUpIcon />
-          </button>
-          <ComposerPrimitive.Cancel className="absolute inset-0 flex items-center justify-center transition group-data-[running=false]/composer:scale-0 group-data-[running=false]/composer:opacity-0">
-            <SquareIcon />
-          </ComposerPrimitive.Cancel>
+          <div className="flex items-center gap-1">
+            {isPopoverReady ? (
+              <Popover open={isMenuOpen} onOpenChange={setIsMenuOpen}>
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    className={cn(
+                      "flex h-10 w-10 items-center justify-center rounded-xl transition-all active:scale-95",
+                      isMenuOpen
+                        ? "rotate-45 bg-[var(--surface)] text-[var(--text)]"
+                        : "text-[var(--muted)] hover:bg-[var(--surface)] hover:text-[var(--text)]",
+                    )}
+                    aria-label="More options"
+                  >
+                    <PlusIcon className="h-5 w-5" />
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent
+                  align="end"
+                  side="top"
+                  sideOffset={12}
+                  className="glass-panel w-64 rounded-2xl border border-[var(--border)] bg-[var(--bg)]/95 p-2 text-[var(--text)] shadow-2xl"
+                >
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleAttachmentClick();
+                      setIsMenuOpen(false);
+                    }}
+                    className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-[var(--text)] transition-colors hover:bg-[var(--surface)]"
+                  >
+                    <AttachmentIcon className="h-4 w-4" />
+                    <span>Upload Documents</span>
+                  </button>
+
+                  <div className="my-1.5 h-px bg-[var(--border)]" />
+
+                  <div className="px-3 py-2 text-left">
+                    <label className="text-[10px] font-bold tracking-wider text-[var(--muted)] uppercase opacity-60">
+                      Language Support
+                    </label>
+                    <Select
+                      value={selectedLanguage}
+                      onValueChange={setSelectedLanguage}
+                    >
+                      <SelectTrigger className="mt-2 h-9 border-[var(--border)] bg-[var(--surface)] text-[var(--text)] focus:ring-[var(--accent)]">
+                        <SelectValue placeholder="Automatic Detection" />
+                      </SelectTrigger>
+                      <SelectContent className="border-[var(--border)] bg-[var(--bg)] text-[var(--text)]">
+                        <SelectItem value="auto">Automatic Detection</SelectItem>
+                        <SelectItem value="en-US">English (US)</SelectItem>
+                        <SelectItem value="es-ES">Spanish</SelectItem>
+                        <SelectItem value="de-DE">German</SelectItem>
+                        <SelectItem value="fr-FR">French</SelectItem>
+                        <SelectItem value="ro-RO">Romanian</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="my-1.5 h-px bg-[var(--border)]" />
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (canVoice) setSpeechEnabled(!speechEnabled);
+                    }}
+                    className={cn(
+                      "flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-sm transition-all",
+                      speechEnabled
+                        ? "bg-[var(--accent)]/10 text-[var(--accent)]"
+                        : "text-[var(--text)] hover:bg-[var(--surface)]",
+                      !canVoice && "cursor-not-allowed opacity-50",
+                    )}
+                    disabled={!canVoice}
+                  >
+                    <span>Voice Integration</span>
+                    <div
+                      className={cn(
+                        "h-1.5 w-1.5 rounded-full",
+                        speechEnabled
+                          ? "bg-[var(--accent)] shadow-[0_0_8px_var(--accent)]"
+                          : "bg-[var(--muted)]",
+                      )}
+                    />
+                  </button>
+
+                  <div className="mt-1 px-1 pb-1">
+                    <div className="flex gap-1 rounded-xl bg-[var(--surface)]/50 p-1">
+                      <button
+                        type="button"
+                        onClick={() => setVoiceGender("female")}
+                        className={cn(
+                          "flex-1 rounded-lg px-2 py-1.5 text-[10px] font-bold tracking-wider uppercase transition-all",
+                          voiceGender === "female"
+                            ? "bg-[var(--bg-elev)] text-[var(--text)] shadow-sm"
+                            : "text-[var(--muted)] hover:text-[var(--text)]",
+                        )}
+                      >
+                        Female
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setVoiceGender("male")}
+                        className={cn(
+                          "flex-1 rounded-lg px-2 py-1.5 text-[10px] font-bold tracking-wider uppercase transition-all",
+                          voiceGender === "male"
+                            ? "bg-[var(--bg-elev)] text-[var(--text)] shadow-sm"
+                            : "text-[var(--muted)] hover:text-[var(--text)]",
+                        )}
+                      >
+                        Male
+                      </button>
+                    </div>
+                  </div>
+                </PopoverContent>
+              </Popover>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setIsMenuOpen((prev) => !prev)}
+                className={cn(
+                  "flex h-10 w-10 items-center justify-center rounded-xl transition-all active:scale-95",
+                  isMenuOpen
+                    ? "rotate-45 bg-[var(--surface)] text-[var(--text)]"
+                    : "text-[var(--muted)] hover:bg-[var(--surface)] hover:text-[var(--text)]",
+                )}
+                aria-label="More options"
+              >
+                <PlusIcon className="h-5 w-5" />
+              </button>
+            )}
+
+            <div className="relative h-10 w-10">
+              {/* MIC BUTTON */}
+              <button
+                type="button"
+                onClick={handleMicClick}
+                className={cn(
+                  "absolute inset-0 flex items-center justify-center rounded-xl text-white shadow-lg transition-all active:scale-95",
+                  isListening
+                    ? "scale-105 bg-red-500"
+                    : "bg-gradient-to-br from-[var(--accent)] to-[var(--accent-soft)] hover:scale-105 hover:brightness-110",
+                  !canVoice && "hidden",
+                  !isEmpty && !isListening && "scale-0 opacity-0",
+                )}
+              >
+                {isListening ? (
+                  <SquareIcon className="h-4 w-4" />
+                ) : (
+                  <MicIcon className="h-[22px] w-[22px]" />
+                )}
+              </button>
+
+              {/* SEND BUTTON */}
+              <button
+                type="button"
+                onClick={async () => {
+                  const text = draft.trim();
+                  if (!text && selectedFiles.length === 0) return;
+                  const content = await buildUserContent(text, selectedFiles);
+                  if (content.length > 0) {
+                    api.thread().append({ role: "user", content });
+                    setDraft("");
+                    handleRemoveFile();
+                  }
+                }}
+                className={cn(
+                  "absolute inset-0 flex items-center justify-center rounded-xl bg-gradient-to-br from-[var(--accent)] to-[var(--accent-soft)] text-white shadow-lg transition-all active:scale-95",
+                  isEmpty
+                    ? "scale-0 opacity-0"
+                    : "hover:scale-105 hover:brightness-110",
+                  isListening && "pointer-events-none scale-0 opacity-0",
+                )}
+                disabled={isEmpty || isListening}
+              >
+                <ArrowUpIcon className="h-5 w-5" />
+              </button>
+            </div>
+          </div>
         </div>
-      </div>
+      </ComposerPrimitive.Root>
 
       <input
         ref={cameraInputRef}
         type="file"
         accept="image/*"
         capture="environment"
+        multiple
         className="hidden"
         onChange={handleCameraChange}
         disabled={!canPhotos}
@@ -1219,11 +1585,12 @@ const Composer = ({
         ref={fileInputRef}
         type="file"
         accept="image/*,video/*,application/pdf,text/plain"
+        multiple
         className="hidden"
         onChange={handleAttachmentChange}
         disabled={!canPhotos}
       />
-    </ComposerPrimitive.Root>
+    </>
   );
 };
 
@@ -1236,7 +1603,7 @@ const ComposerContainer = ({
 }) => {
   if (!isVisible) return null;
   return (
-    <div className="sticky bottom-0 mt-auto shrink-0 bg-gradient-to-t from-[var(--bg)] to-transparent pt-2 pb-4">
+    <div className="relative z-20 shrink-0 bg-gradient-to-t from-[var(--bg)] via-[var(--bg)]/90 to-transparent pt-4 pb-6">
       {children}
     </div>
   );
@@ -1248,26 +1615,28 @@ export default function GrokThread({
   inlineThread = false,
   header,
   initialThreadId = null,
+  onThreadChange,
 }: {
   onChatStart?: () => void;
   showHistorySidebar?: boolean;
   inlineThread?: boolean;
   header?: React.ReactNode;
   initialThreadId?: string | null;
+  onThreadChange?: (threadId: string | null) => void;
 }) {
-  const { isAuthenticated } = useConvexAuth();
+  const { isAuthenticated, isLoading } = useConvexAuth();
   const queryClient = useQueryClient();
   const { data: initialEntitlements } = useEntitlementsQuery();
   const [guestChatId, setGuestChatId] = useState<string | null>(() => {
     if (typeof window === "undefined") return null;
     const existing = localStorage.getItem("fixly_guest_chat_id");
     if (existing) return existing;
-    if (isAuthenticated) return null;
+    if (isLoading || isAuthenticated) return null;
     const created = buildGuestChatId();
     localStorage.setItem("fixly_guest_chat_id", created);
     return created;
   });
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const {
     selectedLanguage,
     setSelectedLanguage,
@@ -1296,17 +1665,47 @@ export default function GrokThread({
   const [activeThreadId, setActiveThreadId] = useState<string | null>(
     initialThreadId,
   );
-  const [isHistoryCollapsed, setIsHistoryCollapsed] = useState(false);
-  const [isHistoryDrawerOpen, setIsHistoryDrawerOpen] = useState(false);
-  const canUseChatHistory = isAuthenticated || Boolean(guestChatId);
-  const shouldPersistHistory = isAuthenticated || Boolean(guestChatId);
+  const lastNotifiedThreadRef = useRef<string | null>(initialThreadId ?? null);
+  const [resetThreadToken, setResetThreadToken] = useState(0);
+  const notifyThreadChange = useCallback(
+    (threadId: string | null) => {
+      if (!onThreadChange) return;
+      if (lastNotifiedThreadRef.current === threadId) return;
+      lastNotifiedThreadRef.current = threadId;
+      onThreadChange(threadId);
+    },
+    [onThreadChange],
+  );
+  const canUseChatHistory =
+    !isLoading && (isAuthenticated || Boolean(guestChatId));
+  const shouldPersistHistory =
+    !isLoading && (isAuthenticated || Boolean(guestChatId));
   const threads = useQuery(
     api.chatHistory.listThreadsForUser,
     isAuthenticated && canUseChatHistory && showHistorySidebar ? {} : "skip",
   ) as HistoryThread[] | undefined;
+  const threadSummary = useQuery(
+    api.chatHistory.getThreadSummaryForActor,
+    activeThreadId && canUseChatHistory
+      ? {
+          threadId: activeThreadId as Id<"chatThreads">,
+          anonymousId: isAuthenticated ? undefined : (guestChatId ?? undefined),
+        }
+      : "skip",
+  ) as
+    | {
+        id: Id<"chatThreads">;
+        title: string;
+        updatedAt: number;
+        lastPreview: string;
+      }
+    | null
+    | undefined;
+  const canFetchThreadMessages =
+    Boolean(activeThreadId) && Boolean(threadSummary);
   const threadMessages = useQuery(
     api.chatHistory.getThreadMessagesForActor,
-    activeThreadId && canUseChatHistory
+    canFetchThreadMessages && canUseChatHistory
       ? {
           threadId: activeThreadId as Id<"chatThreads">,
           anonymousId: isAuthenticated ? undefined : (guestChatId ?? undefined),
@@ -1407,6 +1806,8 @@ export default function GrokThread({
   );
   const runtime = useLocalRuntime(chatAdapter);
   const createGuestChatId = buildGuestChatId;
+  const showEntitlementsDebug =
+    env.NEXT_PUBLIC_SHOW_ENTITLEMENTS_DEBUG ?? false;
 
   useEffect(() => {
     if (!entitlements.capabilities.voice && speechEnabled) {
@@ -1415,16 +1816,38 @@ export default function GrokThread({
   }, [entitlements.capabilities.voice, speechEnabled, setSpeechEnabled]);
 
   useEffect(() => {
-    if (!entitlements.capabilities.photos && selectedFile) {
-      setSelectedFile(null);
+    if (!entitlements.capabilities.photos && selectedFiles.length > 0) {
+      setSelectedFiles([]);
     }
-  }, [entitlements.capabilities.photos, selectedFile, setSelectedFile]);
+  }, [entitlements.capabilities.photos, selectedFiles.length]);
 
   useEffect(() => {
-    if (initialThreadId) {
-      setActiveThreadId(initialThreadId);
-    }
+    setActiveThreadId(initialThreadId ?? null);
   }, [initialThreadId, setActiveThreadId]);
+
+  useEffect(() => {
+    if (!activeThreadId) return;
+    if (isLoading) return;
+    if (threadSummary === undefined) return;
+    if (threadSummary !== null) return;
+    setActiveThreadId(null);
+    setResetThreadToken((value) => value + 1);
+    notifyThreadChange(null);
+  }, [
+    activeThreadId,
+    isLoading,
+    notifyThreadChange,
+    threadSummary,
+    setActiveThreadId,
+  ]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (isLoading || isAuthenticated || guestChatId) return;
+    const created = buildGuestChatId();
+    localStorage.setItem("fixly_guest_chat_id", created);
+    setGuestChatId(created);
+  }, [guestChatId, isAuthenticated, isLoading]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -1495,6 +1918,7 @@ export default function GrokThread({
         <ChatThreadContent
           onChatStart={onChatStart}
           isAuthenticated={isAuthenticated}
+          authLoading={isLoading}
           canUseChatHistory={canUseChatHistory}
           guestChatId={guestChatId}
           setGuestChatId={setGuestChatId}
@@ -1507,25 +1931,23 @@ export default function GrokThread({
           threadMessages={threadMessages}
           activeThreadId={activeThreadId}
           setActiveThreadId={setActiveThreadId}
-          isHistoryCollapsed={isHistoryCollapsed}
-          setIsHistoryCollapsed={setIsHistoryCollapsed}
-          isHistoryDrawerOpen={isHistoryDrawerOpen}
-          setIsHistoryDrawerOpen={setIsHistoryDrawerOpen}
           createThread={createThread}
           appendMessages={appendMessages}
           renameThread={renameThread}
           deleteThread={deleteThread}
           getRegisteredAttachments={getRegisteredAttachments}
-          selectedFile={selectedFile}
-          setSelectedFile={setSelectedFile}
+          selectedFiles={selectedFiles}
+          setSelectedFiles={setSelectedFiles}
           selectedLanguage={selectedLanguage}
           setSelectedLanguage={setSelectedLanguage}
           speechEnabled={speechEnabled}
           setSpeechEnabled={setSpeechEnabled}
           voiceGender={voiceGender}
           setVoiceGender={setVoiceGender}
+          notifyThreadChange={notifyThreadChange}
+          resetThreadToken={resetThreadToken}
         />
-        {process.env.NODE_ENV === "development" && <EntitlementsDebug />}
+        {showEntitlementsDebug && <EntitlementsDebug />}
       </AssistantRuntimeProvider>
     </EntitlementsContext.Provider>
   );
@@ -1534,6 +1956,7 @@ export default function GrokThread({
 const ChatThreadContent = ({
   onChatStart,
   isAuthenticated,
+  authLoading,
   canUseChatHistory,
   guestChatId,
   setGuestChatId,
@@ -1546,26 +1969,25 @@ const ChatThreadContent = ({
   threadMessages,
   activeThreadId,
   setActiveThreadId,
-  isHistoryCollapsed,
-  setIsHistoryCollapsed,
-  isHistoryDrawerOpen,
-  setIsHistoryDrawerOpen,
   createThread,
   appendMessages,
   renameThread,
   deleteThread,
   getRegisteredAttachments,
-  selectedFile,
-  setSelectedFile,
+  selectedFiles,
+  setSelectedFiles,
   selectedLanguage,
   setSelectedLanguage,
   speechEnabled,
   setSpeechEnabled,
   voiceGender,
   setVoiceGender,
+  notifyThreadChange,
+  resetThreadToken,
 }: {
   onChatStart?: () => void;
   isAuthenticated: boolean;
+  authLoading: boolean;
   canUseChatHistory: boolean;
   guestChatId: string | null;
   setGuestChatId: (value: string | null) => void;
@@ -1578,10 +2000,6 @@ const ChatThreadContent = ({
   threadMessages?: HistoryMessage[];
   activeThreadId: string | null;
   setActiveThreadId: (value: string | null) => void;
-  isHistoryCollapsed: boolean;
-  setIsHistoryCollapsed: (value: boolean) => void;
-  isHistoryDrawerOpen: boolean;
-  setIsHistoryDrawerOpen: (value: boolean) => void;
   createThread: (args: {
     title?: string;
     guestChatId?: string;
@@ -1594,6 +2012,7 @@ const ChatThreadContent = ({
       contentText: string;
       createdAt?: number;
       attachments?: ChatAttachment[];
+      actions?: ActionItem[];
     }>;
   }) => Promise<null>;
   renameThread: (args: {
@@ -1602,21 +2021,50 @@ const ChatThreadContent = ({
   }) => Promise<null>;
   deleteThread: (args: { threadId: Id<"chatThreads"> }) => Promise<null>;
   getRegisteredAttachments: (messageId?: string) => ChatAttachment[] | null;
-  selectedFile: File | null;
-  setSelectedFile: (file: File | null) => void;
+  selectedFiles: File[];
+  setSelectedFiles: Dispatch<SetStateAction<File[]>>;
   selectedLanguage: string;
   setSelectedLanguage: (value: string) => void;
   speechEnabled: boolean;
   setSpeechEnabled: (value: boolean) => void;
   voiceGender: "female" | "male";
   setVoiceGender: (value: "female" | "male") => void;
+  notifyThreadChange?: (threadId: string | null) => void;
+  resetThreadToken: number;
 }) => {
-  const { entitlements } = useEntitlements();
+  const { entitlements, messageActions, setMessageActions } = useEntitlements();
   const api = useAssistantApi();
+
+  const handleSuggestionClick = useCallback(
+    (text: string) => {
+      api.thread().append({
+        role: "user",
+        content: [{ type: "text", text }],
+      });
+    },
+    [api],
+  );
+  // Keep draft local so the input stays responsive even if composer state stalls.
+  const [draft, setDraft] = useState("");
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const isAtBottomRef = useRef(true);
   const scrollRafRef = useRef<number | null>(null);
+
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const ttsAbortControllersRef = useRef<AbortController[]>([]);
+  const ttsPendingAudioRef = useRef<Map<number, HTMLAudioElement>>(new Map());
+  const ttsBufferRef = useRef<string>("");
+  const ttsSpeakingRef = useRef(false);
+  const ttsProcessedLengthRef = useRef(0);
+  const ttsSequenceRef = useRef(0);
+  const ttsNextPlayRef = useRef(0);
+  const lastAssistantLengthRef = useRef(0);
+  const loadedThreadRef = useRef<string | null>(null);
+  const lastPersistedCountRef = useRef(0);
+  const isPersistingRef = useRef(false);
+  const isCreatingThreadRef = useRef(false);
+  const activeThreadIdRef = useRef<string | null>(activeThreadId);
   const lastUserText = useAssistantState((state) => {
     const messages = state.thread.messages;
     for (let i = messages.length - 1; i >= 0; i -= 1) {
@@ -1656,6 +2104,20 @@ const ChatThreadContent = ({
   const isThreadEmpty = useAssistantState(
     (state) => state.thread.messages.length === 0,
   );
+  // Track if we are currently loading/syncing a historical thread to avoid flashing the empty hero state.
+  const isThreadTransitioning =
+    Boolean(activeThreadId) && loadedThreadRef.current !== activeThreadId;
+  const shouldShowThreadLoading =
+    Boolean(activeThreadId) && threadMessagesState.length === 0;
+
+  const [viewerImage, setViewerImage] = useState<{
+    url: string;
+    name: string;
+  } | null>(null);
+  const openImage = useCallback((url: string, name?: string) => {
+    setViewerImage({ url, name: name ?? "Image" });
+  }, []);
+  const imageViewerValue = useMemo(() => ({ openImage }), [openImage]);
 
   const updateIsAtBottom = useCallback(() => {
     const element = scrollRef.current;
@@ -1695,20 +2157,6 @@ const ChatThreadContent = ({
   useEffect(() => {
     activeThreadIdRef.current = activeThreadId;
   }, [activeThreadId]);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const ttsAbortControllersRef = useRef<AbortController[]>([]);
-  const ttsPendingAudioRef = useRef<Map<number, HTMLAudioElement>>(new Map());
-  const ttsBufferRef = useRef<string>("");
-  const ttsSpeakingRef = useRef(false);
-  const ttsProcessedLengthRef = useRef(0);
-  const ttsSequenceRef = useRef(0);
-  const ttsNextPlayRef = useRef(0);
-  const lastAssistantLengthRef = useRef(0);
-  const loadedThreadRef = useRef<string | null>(null);
-  const lastPersistedCountRef = useRef(0);
-  const isPersistingRef = useRef(false);
-  const isCreatingThreadRef = useRef(false);
-  const activeThreadIdRef = useRef<string | null>(activeThreadId);
 
   const clearTts = () => {
     ttsAbortControllersRef.current.forEach((controller) => controller.abort());
@@ -1778,15 +2226,55 @@ const ChatThreadContent = ({
 
   useEffect(() => {
     if (!canUseChatHistory || !activeThreadId || !threadMessages) return;
-    if (loadedThreadRef.current === activeThreadId) return;
+    const shouldHydrate =
+      loadedThreadRef.current !== activeThreadId ||
+      (threadMessagesState.length === 0 && threadMessages.length > 0);
+    if (!shouldHydrate) return;
     const initialMessages = threadMessages.map((message) => ({
       role: message.role,
       content: buildHistoryContent(message),
     }));
+    if (threadMessagesState.length > initialMessages.length) {
+      // Local runtime is ahead of server; wait for persistence to catch up.
+      return;
+    }
     api.thread().reset(initialMessages);
+    const lastActionMessage = [...threadMessages]
+      .reverse()
+      .find(
+        (message) =>
+          message.role === "assistant" && (message.actions?.length ?? 0) > 0,
+      );
+    if (lastActionMessage?.actions?.length) {
+      const nextActions = lastActionMessage.actions;
+      const currentActions = messageActions?.actions ?? null;
+      const isSame =
+        currentActions &&
+        currentActions.length === nextActions.length &&
+        currentActions.every(
+          (action, index) =>
+            action.type === nextActions[index]?.type &&
+            action.label === nextActions[index]?.label &&
+            action.href === nextActions[index]?.href &&
+            action.variant === nextActions[index]?.variant,
+        );
+      if (!isSame) {
+        setMessageActions({ actions: nextActions });
+      }
+    } else if (messageActions?.actions?.length) {
+      setMessageActions(null);
+    }
     loadedThreadRef.current = activeThreadId;
     lastPersistedCountRef.current = initialMessages.length;
-  }, [api, activeThreadId, canUseChatHistory, threadMessages]);
+  }, [
+    api,
+    activeThreadId,
+    canUseChatHistory,
+    messageActions,
+    setMessageActions,
+    threadMessages,
+    threadMessagesState.length,
+  ]);
 
   useEffect(() => {
     if (!activeThreadId) {
@@ -1794,6 +2282,27 @@ const ChatThreadContent = ({
       lastPersistedCountRef.current = threadMessagesState.length;
     }
   }, [activeThreadId, threadMessagesState.length]);
+
+  useEffect(() => {
+    if (!resetThreadToken) return;
+    api.thread().reset();
+  }, [api, resetThreadToken]);
+
+  useEffect(() => {
+    if (!notifyThreadChange) return;
+    if (isRunning) return;
+    if (activeThreadId) {
+      if (!threadMessages) return;
+      if (threadMessages.length < threadMessagesState.length) return;
+    }
+    notifyThreadChange(activeThreadId);
+  }, [
+    activeThreadId,
+    isRunning,
+    notifyThreadChange,
+    threadMessages,
+    threadMessagesState.length,
+  ]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -1995,21 +2504,41 @@ const ChatThreadContent = ({
       return;
     }
 
+    const lastAssistantIndex = (() => {
+      for (let i = threadMessagesState.length - 1; i >= 0; i -= 1) {
+        if (threadMessagesState[i]?.role === "assistant") {
+          return i;
+        }
+      }
+      return -1;
+    })();
+    const actionItems = messageActions?.actions?.length
+      ? messageActions.actions
+      : null;
     const newMessages = threadMessagesState
       .slice(lastPersistedCountRef.current)
-      .map((message) => {
+      .map((message, index) => {
         const contentText = extractText(message).trim();
         const attachments = extractAttachmentsForMessage(message);
+        const absoluteIndex = lastPersistedCountRef.current + index;
+        const actions =
+          actionItems &&
+          message.role === "assistant" &&
+          absoluteIndex === lastAssistantIndex
+            ? actionItems
+            : undefined;
         return {
           role: message.role,
           contentText,
           attachments: attachments.length > 0 ? attachments : undefined,
+          actions,
         };
       })
       .filter(
         (message) =>
           message.contentText.length > 0 ||
-          (message.attachments?.length ?? 0) > 0,
+          (message.attachments?.length ?? 0) > 0 ||
+          (message.actions?.length ?? 0) > 0,
       );
 
     if (newMessages.length === 0) {
@@ -2059,82 +2588,246 @@ const ChatThreadContent = ({
     isRunning,
     lastAssistantStatus,
     lastMessageRole,
+    messageActions,
     setActiveThreadId,
     setGuestChatId,
     threadMessagesState,
   ]);
 
   return (
-    <>
-      <ChatLogic onChatStart={onChatStart} />
-      <ChatShell
-        onClose={() => setSelectedFile(null)}
-        inlineThread={inlineThread}
-      >
-        <div
-          className={
-            showHistorySidebar
-              ? "flex h-full w-full items-stretch"
-              : "h-full w-full"
-          }
+    <ImageViewerContext.Provider value={imageViewerValue}>
+      <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
+        <ChatLogic onChatStart={onChatStart} />
+        <ChatShell
+          onClose={() => setSelectedFiles([])}
+          inlineThread={inlineThread}
         >
-          {showHistorySidebar ? (
-            <ChatHistorySidebar
-              canUseChatHistory={canUseChatHistory}
-              isAuthenticated={isAuthenticated}
-              threads={threads}
-              activeThreadId={activeThreadId}
-              onSelectThread={(threadId) => {
-                setActiveThreadId(threadId);
-                loadedThreadRef.current = null;
-                lastPersistedCountRef.current = 0;
-                api.thread().reset();
-                setIsHistoryDrawerOpen(false);
-              }}
-              onNewChat={async () => {
-                api.thread().reset();
-                if (canUseChatHistory && isAuthenticated) {
-                  try {
-                    const threadId = await createThread({
-                      title: "New repair chat",
-                    });
+          <div className="relative flex h-full min-h-0 flex-1 flex-col overflow-hidden">
+            {/* PREMIUM GRADIENT BACKGROUND (Only visible when empty and not transitioning) */}
+            {isThreadEmpty && !isThreadTransitioning && (
+              <div className="animate-in fade-in pointer-events-none absolute inset-0 -z-10 h-full w-full overflow-hidden duration-1000">
+                <PremiumBackground />
+              </div>
+            )}
+
+            {showHistorySidebar ? (
+              <SidebarProvider
+                className="relative min-h-0 flex-1"
+                style={{ "--sidebar-width": "307px" } as CSSProperties}
+              >
+                <ChatHistorySidebar
+                  canUseChatHistory={canUseChatHistory}
+                  isAuthenticated={isAuthenticated}
+                  authLoading={authLoading}
+                  threads={threads}
+                  activeThreadId={activeThreadId}
+                  onSelectThread={(threadId) => {
                     setActiveThreadId(threadId);
-                    loadedThreadRef.current = threadId;
-                  } catch {
+                    loadedThreadRef.current = null;
+                    lastPersistedCountRef.current = 0;
+                    api.thread().reset();
+                  }}
+                  onNewChat={async () => {
+                    api.thread().reset();
+                    loadedThreadRef.current = null;
+                    lastPersistedCountRef.current = 0;
                     setActiveThreadId(null);
+                    notifyThreadChange?.(null);
+                  }}
+                  onRenameThread={(threadId, title) =>
+                    renameThread({ threadId, title })
                   }
-                } else {
-                  setActiveThreadId(null);
-                }
-              }}
-              onRenameThread={(threadId, title) =>
-                renameThread({ threadId, title })
-              }
-              onDeleteThread={(threadId) => {
-                deleteThread({ threadId });
-                if (activeThreadId === threadId) {
-                  setActiveThreadId(null);
-                  api.thread().reset();
-                }
-              }}
-              isCollapsed={isHistoryCollapsed}
-              onToggleCollapse={() =>
-                setIsHistoryCollapsed(!isHistoryCollapsed)
-              }
-              isDrawerOpen={isHistoryDrawerOpen}
-              onToggleDrawer={() =>
-                setIsHistoryDrawerOpen(!isHistoryDrawerOpen)
-              }
-            />
-          ) : null}
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-            {header ? <div className="shrink-0 pb-8">{header}</div> : null}
-            <ThreadPrimitive.Root className="flex min-h-0 w-full flex-1 flex-col bg-transparent">
-              <ThreadPrimitive.Empty>
-                <div className="flex w-full flex-col items-center justify-center pt-4">
+                  onDeleteThread={(threadId) => {
+                    deleteThread({ threadId });
+                    if (activeThreadId === threadId) {
+                      setActiveThreadId(null);
+                      api.thread().reset();
+                    }
+                  }}
+                />
+                <SidebarRail />
+                <SidebarInset
+                  className={cn(
+                    "flex h-full min-h-0 flex-1 flex-col overflow-hidden transition-colors duration-700",
+                    isThreadEmpty ? "bg-transparent" : "bg-[var(--bg)]",
+                  )}
+                >
+                  <div className="relative flex h-full min-h-0 flex-1 flex-col overflow-hidden">
+                    {/* MOBILE SIDEBAR TRIGGER */}
+                    <div className="flex shrink-0 items-center gap-3 px-4 pt-4 md:hidden">
+                      <SidebarTrigger className="h-8 w-8 rounded-full border border-[var(--border)] bg-[var(--bg-elev)]/80 text-[var(--text)] hover:bg-[var(--surface)]" />
+                      <span className="text-xs font-semibold text-[var(--text)]">
+                        History
+                      </span>
+                    </div>
+
+                    <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
+                      <ThreadPrimitive.Root
+                        className={cn(
+                          "relative flex min-h-0 w-full flex-1 flex-col overflow-hidden",
+                          isThreadEmpty ? "overscroll-none" : "",
+                        )}
+                      >
+                        {/* EMPTY STATE HERO + COMPOSER */}
+                        <ThreadPrimitive.Empty>
+                          {!isThreadTransitioning &&
+                            !shouldShowThreadLoading && (
+                            <div className="flex h-full w-full flex-col overflow-y-auto">
+                              <div className="mx-auto flex w-full max-w-3xl flex-col items-center px-4 pt-[10vh] pb-20">
+                                {header || (
+                                  <EmptyStateHero
+                                    onSuggestionClick={handleSuggestionClick}
+                                  />
+                                )}
+
+                                <div className="animate-in slide-in-from-bottom-4 mt-12 w-full duration-700">
+                                  <Composer
+                                    selectedFiles={selectedFiles}
+                                    setSelectedFiles={setSelectedFiles}
+                                    draft={draft}
+                                    setDraft={setDraft}
+                                    selectedLanguage={selectedLanguage}
+                                    setSelectedLanguage={setSelectedLanguage}
+                                    lastUserText={lastUserText}
+                                    speechEnabled={speechEnabled}
+                                    setSpeechEnabled={setSpeechEnabled}
+                                    voiceGender={voiceGender}
+                                    setVoiceGender={setVoiceGender}
+                                    canVoice={entitlements.capabilities.voice}
+                                    canPhotos={entitlements.capabilities.photos}
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </ThreadPrimitive.Empty>
+
+                        <div
+                          className={cn(
+                            "flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain scroll-smooth pt-4",
+                            isThreadEmpty &&
+                              !isThreadTransitioning &&
+                              !shouldShowThreadLoading &&
+                              "hidden",
+                          )}
+                          ref={scrollRef}
+                          onScroll={updateIsAtBottom}
+                        >
+                          {isThreadTransitioning || shouldShowThreadLoading ? (
+                            <ThreadLoadingState />
+                          ) : (
+                            <ThreadPrimitive.Viewport className="mx-auto flex w-full max-w-3xl flex-col gap-4 px-4 pb-6">
+                              <ThreadPrimitive.Messages
+                                components={{ Message: ChatMessage }}
+                              />
+                              <TypingIndicator />
+                              <div ref={bottomRef} />
+                            </ThreadPrimitive.Viewport>
+                          )}
+                        </div>
+                      </ThreadPrimitive.Root>
+
+                      <ComposerContainer
+                        isVisible={!isThreadEmpty || isThreadTransitioning}
+                      >
+                        <Composer
+                          selectedFiles={selectedFiles}
+                          setSelectedFiles={setSelectedFiles}
+                          draft={draft}
+                          setDraft={setDraft}
+                          selectedLanguage={selectedLanguage}
+                          setSelectedLanguage={setSelectedLanguage}
+                          lastUserText={lastUserText}
+                          speechEnabled={speechEnabled}
+                          setSpeechEnabled={setSpeechEnabled}
+                          voiceGender={voiceGender}
+                          setVoiceGender={setVoiceGender}
+                          canVoice={entitlements.capabilities.voice}
+                          canPhotos={entitlements.capabilities.photos}
+                        />
+                      </ComposerContainer>
+                    </div>
+                  </div>
+                </SidebarInset>
+              </SidebarProvider>
+            ) : (
+              <div className="relative flex h-full min-h-0 flex-1 flex-col overflow-hidden">
+                <ThreadPrimitive.Root
+                  className={cn(
+                    "relative flex min-h-0 w-full flex-1 flex-col overflow-hidden",
+                    (isThreadEmpty || isThreadTransitioning) &&
+                      "overscroll-none",
+                  )}
+                >
+                  {/* EMPTY STATE HERO + COMPOSER (Stand-alone mode) */}
+                <ThreadPrimitive.Empty>
+                    {!isThreadTransitioning &&
+                      !shouldShowThreadLoading && (
+                      <div className="flex h-full w-full flex-col overflow-y-auto">
+                        <div className="mx-auto flex w-full max-w-3xl flex-col items-center px-4 pt-[10vh] pb-20">
+                          {header || (
+                            <EmptyStateHero
+                              onSuggestionClick={handleSuggestionClick}
+                            />
+                          )}
+
+                          <div className="animate-in slide-in-from-bottom-4 mt-12 w-full duration-700">
+                            <Composer
+                              selectedFiles={selectedFiles}
+                              setSelectedFiles={setSelectedFiles}
+                              draft={draft}
+                              setDraft={setDraft}
+                              selectedLanguage={selectedLanguage}
+                              setSelectedLanguage={setSelectedLanguage}
+                              lastUserText={lastUserText}
+                              speechEnabled={speechEnabled}
+                              setSpeechEnabled={setSpeechEnabled}
+                              voiceGender={voiceGender}
+                              setVoiceGender={setVoiceGender}
+                              canVoice={entitlements.capabilities.voice}
+                              canPhotos={entitlements.capabilities.photos}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </ThreadPrimitive.Empty>
+
+                  {/* MESSAGE AREA (Stand-alone mode) */}
+                  <div
+                    className={cn(
+                      "flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain scroll-smooth pt-4",
+                      isThreadEmpty &&
+                        !isThreadTransitioning &&
+                        !shouldShowThreadLoading &&
+                        "hidden",
+                    )}
+                    ref={scrollRef}
+                    onScroll={updateIsAtBottom}
+                  >
+                    {isThreadTransitioning || shouldShowThreadLoading ? (
+                      <ThreadLoadingState />
+                    ) : (
+                      <ThreadPrimitive.Viewport className="mx-auto flex w-full max-w-3xl flex-col gap-4 px-4 pb-6">
+                        <ThreadPrimitive.Messages
+                          components={{ Message: ChatMessage }}
+                        />
+                        <TypingIndicator />
+                        <div ref={bottomRef} />
+                      </ThreadPrimitive.Viewport>
+                    )}
+                  </div>
+                </ThreadPrimitive.Root>
+
+                {/* STICKY COMPOSER (Stand-alone mode, outside Root) */}
+                <ComposerContainer
+                  isVisible={!isThreadEmpty || isThreadTransitioning}
+                >
                   <Composer
-                    selectedFile={selectedFile}
-                    setSelectedFile={setSelectedFile}
+                    selectedFiles={selectedFiles}
+                    setSelectedFiles={setSelectedFiles}
+                    draft={draft}
+                    setDraft={setDraft}
                     selectedLanguage={selectedLanguage}
                     setSelectedLanguage={setSelectedLanguage}
                     lastUserText={lastUserText}
@@ -2145,76 +2838,70 @@ const ChatThreadContent = ({
                     canVoice={entitlements.capabilities.voice}
                     canPhotos={entitlements.capabilities.photos}
                   />
-                </div>
-              </ThreadPrimitive.Empty>
-
-              <div
-                className="flex min-h-0 flex-1 scroll-pb-28 flex-col overflow-y-auto overscroll-contain scroll-smooth pt-4 pb-28"
-                ref={scrollRef}
-                onScroll={updateIsAtBottom}
-              >
-                <ThreadPrimitive.Viewport className="mx-auto flex w-full max-w-3xl flex-col gap-4 px-4">
-                  <ThreadPrimitive.Messages
-                    components={{ Message: ChatMessage }}
-                  />
-                  <TypingIndicator />
-                  <div ref={bottomRef} />
-                </ThreadPrimitive.Viewport>
+                </ComposerContainer>
               </div>
-
-              <ComposerContainer isVisible={!isThreadEmpty}>
-                <Composer
-                  selectedFile={selectedFile}
-                  setSelectedFile={setSelectedFile}
-                  selectedLanguage={selectedLanguage}
-                  setSelectedLanguage={setSelectedLanguage}
-                  lastUserText={lastUserText}
-                  speechEnabled={speechEnabled}
-                  setSpeechEnabled={setSpeechEnabled}
-                  voiceGender={voiceGender}
-                  setVoiceGender={setVoiceGender}
-                  canVoice={entitlements.capabilities.voice}
-                  canPhotos={entitlements.capabilities.photos}
-                />
-              </ComposerContainer>
-            </ThreadPrimitive.Root>
+            )}
           </div>
-        </div>
-      </ChatShell>
-    </>
+        </ChatShell>
+      </div>
+
+      <Dialog
+        open={Boolean(viewerImage)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setViewerImage(null);
+          }
+        }}
+      >
+        <DialogContent className="h-[70svh] w-[70vw] max-w-[70vw] overflow-hidden border-[var(--border)] bg-[var(--bg)]/95 p-4 text-[var(--text)]">
+          <DialogTitle className="sr-only">Image preview</DialogTitle>
+          {viewerImage ? (
+            <div className="flex h-full w-full items-center justify-center overflow-hidden">
+              <Image
+                src={viewerImage.url}
+                alt={viewerImage.name}
+                width={1400}
+                height={1400}
+                className="h-full w-full object-contain"
+                unoptimized
+              />
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+    </ImageViewerContext.Provider>
   );
 };
 
 const ChatHistorySidebar = ({
   canUseChatHistory,
   isAuthenticated,
+  authLoading,
   threads,
   activeThreadId,
   onSelectThread,
   onNewChat,
   onRenameThread,
   onDeleteThread,
-  isCollapsed,
-  onToggleCollapse,
-  isDrawerOpen,
-  onToggleDrawer,
 }: {
   canUseChatHistory: boolean;
   isAuthenticated: boolean;
+  authLoading: boolean;
   threads?: HistoryThread[];
   activeThreadId: string | null;
   onSelectThread: (threadId: string) => void;
   onNewChat: () => void;
   onRenameThread: (threadId: Id<"chatThreads">, title: string) => void;
   onDeleteThread: (threadId: Id<"chatThreads">) => void;
-  isCollapsed: boolean;
-  onToggleCollapse: () => void;
-  isDrawerOpen: boolean;
-  onToggleDrawer: () => void;
 }) => {
   const [searchQuery, setSearchQuery] = useState("");
   const [editingThreadId, setEditingThreadId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
+  const { state } = useSidebar();
+  const isCollapsed = state === "collapsed";
+  const isSidebarLoading =
+    authLoading ||
+    (isAuthenticated && canUseChatHistory && threads === undefined);
 
   const filteredThreads = useMemo(() => {
     if (!threads) return [];
@@ -2244,208 +2931,191 @@ const ChatHistorySidebar = ({
     }
   };
 
-  const content = () => {
-    if (!isAuthenticated || !canUseChatHistory) {
-      return (
-        <div className="mt-4 rounded-xl border border-white/10 bg-white/5 px-4 py-4 text-xs text-[var(--muted)]">
-          Log-in or create an account to see your chat history.
-          <Link
-            href={isAuthenticated ? "/pricing" : "/login"}
-            className="mt-3 inline-flex w-full items-center justify-center rounded-full bg-[var(--accent)] px-3 py-2 text-xs font-semibold text-black transition hover:bg-[var(--accent-soft)]"
-          >
-            {isAuthenticated ? "Get a Fix" : "Log in"}
-          </Link>
-        </div>
-      );
-    }
-
-    return (
-      <>
-        <div className="mb-4 flex flex-col gap-2">
-          <button
-            type="button"
-            onClick={onNewChat}
-            className="flex w-full items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-white transition hover:border-white/30"
-          >
-            <PlusIcon />
-            <span>New chat</span>
-          </button>
+  return (
+    <Sidebar
+      variant="sidebar"
+      collapsible="icon"
+      style={{ "--sidebar-width": "307px" } as CSSProperties}
+      className="border-sidebar-border/60 !top-[var(--app-header-height)] !bottom-auto !h-[calc(100svh-var(--app-header-height))] bg-[var(--bg-elev)]/80 transition-[left,right,width] duration-300 ease-in-out"
+    >
+      <SidebarHeader className="gap-3">
+        <div className="flex items-center justify-between px-1">
           {!isCollapsed && (
-            <div className="relative">
-              <input
-                type="text"
-                placeholder="Search chats..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full rounded-lg border border-white/10 bg-transparent px-3 py-1.5 text-xs text-white placeholder:text-[var(--muted)] focus:border-[var(--accent)] focus:outline-none"
-              />
-            </div>
+            <span className="text-sidebar-foreground text-xs font-semibold">
+              History
+            </span>
           )}
+          <SidebarTrigger className="border-sidebar-border/60 text-sidebar-foreground hover:bg-sidebar-accent hidden h-7 w-7 border md:inline-flex" />
         </div>
-
-        <div className="flex flex-col gap-1 overflow-y-auto">
-          {filteredThreads.length > 0 ? (
-            filteredThreads.map((thread) => (
-              <div
-                key={thread.id}
-                className={`group relative flex items-center rounded-lg px-3 py-2 transition ${
-                  activeThreadId === thread.id
-                    ? "bg-[var(--accent)]/10 text-white"
-                    : "text-[var(--muted)] hover:bg-white/5 hover:text-white"
-                }`}
-              >
-                {editingThreadId === thread.id ? (
-                  <input
-                    type="text"
-                    value={editTitle}
-                    onChange={(e) => setEditTitle(e.target.value)}
-                    onBlur={handleSaveEdit}
-                    onKeyDown={handleKeyDown}
-                    autoFocus
-                    className="w-full bg-transparent text-xs font-semibold text-white outline-none"
-                  />
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => onSelectThread(thread.id)}
-                    className="flex min-w-0 flex-1 flex-col text-left"
-                  >
-                    <div className="truncate text-xs font-semibold">
-                      {thread.title}
-                    </div>
-                    <div className="truncate text-[10px] opacity-70">
-                      {thread.lastPreview}
-                    </div>
-                  </button>
+        {isSidebarLoading && !isCollapsed ? (
+          <div className="space-y-2 px-1">
+            <Skeleton className="bg-sidebar-foreground/15 h-9 w-full rounded-lg" />
+            <Skeleton className="bg-sidebar-foreground/10 h-9 w-full rounded-lg" />
+          </div>
+        ) : (
+          isAuthenticated &&
+          canUseChatHistory && (
+            <>
+              <button
+                type="button"
+                onClick={onNewChat}
+                className={cn(
+                  "border-sidebar-border/60 bg-sidebar/60 text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground flex items-center gap-2 rounded-lg border font-semibold transition-all duration-300",
+                  isCollapsed
+                    ? "h-9 w-9 justify-center px-0"
+                    : "w-full px-3 py-2 text-xs",
                 )}
+                title={isCollapsed ? "New chat" : undefined}
+              >
+                <PlusIcon className="shrink-0" />
+                {!isCollapsed && <span>New chat</span>}
+              </button>
+              {!isCollapsed && (
+                <SidebarInput
+                  placeholder="Search chats..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="text-sidebar-foreground placeholder:text-sidebar-foreground/60 bg-transparent focus-visible:ring-[var(--accent)]"
+                />
+              )}
+            </>
+          )
+        )}
+      </SidebarHeader>
+      {!isCollapsed && (
+        <>
+          {isAuthenticated && canUseChatHistory && <SidebarSeparator />}
+          <SidebarContent>
+            {isSidebarLoading ? (
+              <div className="px-2 py-2">
+                <SidebarMenuSkeleton
+                  className="mb-2"
+                  showIcon
+                  width="76%"
+                />
+                <SidebarMenuSkeleton className="mb-2" width="82%" />
+                <SidebarMenuSkeleton className="mb-2" width="65%" />
+                <SidebarMenuSkeleton className="mb-2" width="68%" />
+                <SidebarMenuSkeleton width="51%" />
+              </div>
+            ) : !isAuthenticated || !canUseChatHistory ? (
+              <div className="border-sidebar-border/60 bg-sidebar/60 text-sidebar-foreground/70 mx-2 mt-2 flex flex-col justify-center rounded-xl border px-4 py-4 text-xs">
+                <p className="text-center leading-relaxed wrap-break-word">
+                  Log-in or create an account to see your chat history.
+                </p>
+                <Link
+                  href={isAuthenticated ? "/pricing" : "/login"}
+                  className="mx-auto mt-3 inline-flex w-fit max-w-full items-center justify-center rounded-full bg-[var(--accent)] px-3 py-2 text-xs font-semibold text-black transition hover:bg-[var(--accent-soft)]"
+                >
+                  Log in
+                </Link>
+              </div>
+            ) : (
+              <SidebarMenu>
+                {filteredThreads.length > 0 ? (
+                  filteredThreads.map((thread) => (
+                    <SidebarMenuItem key={thread.id}>
+                      {editingThreadId === thread.id ? (
+                        <input
+                          type="text"
+                          value={editTitle}
+                          onChange={(e) => setEditTitle(e.target.value)}
+                          onBlur={handleSaveEdit}
+                          onKeyDown={handleKeyDown}
+                          autoFocus
+                          className="border-sidebar-border/60 text-sidebar-foreground ring-sidebar-ring w-full rounded-md border bg-transparent px-2 py-1 text-xs font-semibold outline-none focus:border-[var(--accent)]"
+                        />
+                      ) : (
+                        <SidebarMenuButton
+                          asChild
+                          isActive={activeThreadId === thread.id}
+                          className="h-auto py-2"
+                        >
+                          <Link
+                            href={`/c/${thread.id}`}
+                            className="w-full"
+                            onClick={(event) => {
+                              if (
+                                event.metaKey ||
+                                event.ctrlKey ||
+                                event.shiftKey ||
+                                event.altKey ||
+                                event.button !== 0
+                              ) {
+                                return;
+                              }
+                              onSelectThread(thread.id);
+                            }}
+                          >
+                            <div className="flex min-w-0 flex-1 flex-col">
+                              <span className="truncate text-xs font-semibold">
+                                {thread.title}
+                              </span>
+                              <span className="truncate text-[10px] opacity-70">
+                                {thread.lastPreview}
+                              </span>
+                            </div>
+                          </Link>
+                        </SidebarMenuButton>
+                      )}
 
-                {!isCollapsed && editingThreadId !== thread.id && (
-                  <div className="absolute right-2 flex items-center gap-1 opacity-0 transition group-hover:opacity-100">
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleStartEdit(thread);
-                      }}
-                      className="rounded p-1 hover:bg-white/10 hover:text-white"
-                      title="Rename"
-                    >
-                      <svg
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        className="h-3 w-3"
-                      >
-                        <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" />
-                      </svg>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (confirm("Delete this chat?")) {
-                          onDeleteThread(thread.id);
-                        }
-                      }}
-                      className="rounded p-1 hover:bg-red-500/20 hover:text-red-400"
-                      title="Delete"
-                    >
-                      <svg
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        className="h-3 w-3"
-                      >
-                        <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                      </svg>
-                    </button>
+                      {editingThreadId !== thread.id && (
+                        <div className="absolute top-1/2 right-1 flex -translate-y-1/2 items-center gap-1 opacity-0 transition group-hover/menu-item:opacity-100">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleStartEdit(thread);
+                            }}
+                            className="text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground rounded p-1"
+                            title="Rename"
+                          >
+                            <svg
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                              className="h-3 w-3"
+                            >
+                              <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" />
+                            </svg>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (confirm("Delete this chat?")) {
+                                onDeleteThread(thread.id);
+                              }
+                            }}
+                            className="text-sidebar-foreground/70 rounded p-1 hover:bg-red-500/20 hover:text-red-400"
+                            title="Delete"
+                          >
+                            <svg
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                              className="h-3 w-3"
+                            >
+                              <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                            </svg>
+                          </button>
+                        </div>
+                      )}
+                    </SidebarMenuItem>
+                  ))
+                ) : (
+                  <div className="text-sidebar-foreground/60 px-3 py-2 text-xs">
+                    {searchQuery ? "No matching chats." : "No chats yet."}
                   </div>
                 )}
-              </div>
-            ))
-          ) : (
-            <div className="px-3 py-2 text-xs text-[var(--muted)]">
-              {searchQuery ? "No matching chats." : "No chats yet."}
-            </div>
-          )}
-        </div>
-      </>
-    );
-  };
-
-  return (
-    <div className="relative h-full">
-      <button
-        type="button"
-        onClick={onToggleDrawer}
-        className="mb-3 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-2 text-xs text-white transition hover:border-white/30 lg:hidden"
-      >
-        History
-      </button>
-
-      <aside
-        className={`hidden h-full flex-col self-stretch border-r border-white/10 bg-[var(--bg-elev)]/60 p-3 lg:flex ${
-          isCollapsed ? "w-14" : "w-64"
-        }`}
-      >
-        <div className="mb-4 flex items-center justify-between">
-          <span
-            className={`text-xs font-semibold text-white ${
-              isCollapsed ? "hidden" : "block"
-            }`}
-          >
-            History
-          </span>
-          <button
-            type="button"
-            onClick={onToggleCollapse}
-            className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-white/10 bg-white/5 text-[var(--muted)] transition hover:text-white"
-            aria-label="Collapse history"
-          >
-            {isCollapsed ? "›" : "‹"}
-          </button>
-        </div>
-        {!isCollapsed ? (
-          <div className="flex min-h-0 flex-1 flex-col">{content()}</div>
-        ) : (
-          <button
-            type="button"
-            onClick={onNewChat}
-            className="mx-auto flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-white/5 text-white hover:bg-white/10"
-            title="New chat"
-          >
-            <PlusIcon />
-          </button>
-        )}
-      </aside>
-
-      <div
-        className={`fixed inset-0 z-40 bg-black/40 backdrop-blur-sm transition lg:hidden ${
-          isDrawerOpen ? "opacity-100" : "pointer-events-none opacity-0"
-        }`}
-        onClick={onToggleDrawer}
-      />
-      <aside
-        className={`fixed inset-y-0 left-0 z-50 w-64 transform border-r border-white/10 bg-[var(--bg)]/95 p-4 transition lg:hidden ${
-          isDrawerOpen ? "translate-x-0" : "-translate-x-full"
-        }`}
-      >
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-semibold text-white">History</span>
-          <button
-            type="button"
-            onClick={onToggleDrawer}
-            className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-white/10 bg-white/5 text-[var(--muted)]"
-            aria-label="Close history"
-          >
-            ×
-          </button>
-        </div>
-        <div className="mt-4 flex min-h-0 flex-1 flex-col">{content()}</div>
-      </aside>
-    </div>
+              </SidebarMenu>
+            )}
+          </SidebarContent>
+        </>
+      )}
+    </Sidebar>
   );
 };
 
@@ -2467,8 +3137,8 @@ const ChatShell = ({
     <div
       className={
         hasMessages && !inlineThread
-          ? "fixed inset-0 z-50 flex min-h-screen flex-col bg-[var(--bg)] px-6 py-6"
-          : "relative flex min-h-dvh w-full flex-col overflow-hidden"
+          ? "fixed inset-0 z-50 flex h-screen flex-col bg-[var(--bg)] px-6 py-6"
+          : "relative flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden"
       }
     >
       {hasMessages && !inlineThread && (

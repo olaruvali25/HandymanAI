@@ -36,15 +36,16 @@ export default async function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body
-        className={`${plexSans.variable} ${sora.variable} min-h-screen bg-[var(--bg)] text-[var(--text)] antialiased`}
+        className={`${plexSans.variable} ${sora.variable} bg-[var(--bg)] text-[var(--text)] antialiased`}
         suppressHydrationWarning
       >
         <ConvexAuthNextjsServerProvider storageNamespace="handymanai">
           <ConvexClientProvider>
-            <div className="flex min-h-dvh flex-col">
+            <div className="flex min-h-screen flex-col bg-[var(--bg)]">
               <Navbar />
-              <main className="flex-1">{children}</main>
-              <Footer />
+              <main className="relative flex min-h-0 flex-1 flex-col">
+                {children}
+              </main>
             </div>
           </ConvexClientProvider>
         </ConvexAuthNextjsServerProvider>

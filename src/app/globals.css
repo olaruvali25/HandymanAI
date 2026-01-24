@@ -1,8 +1,12 @@
 @config "../../tailwind.config.mjs";
 @import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
 
 :root {
   color-scheme: dark;
+  --app-header-height: 0px;
   --bg: #0d1014;
   --bg-elev: #131820;
   --surface: #171d26;
@@ -21,12 +25,28 @@
   --font-sora: "Sora";
   --font-body: var(--font-plex);
   --font-head: var(--font-sora);
+  --sidebar: var(--bg-elev);
+  --sidebar-foreground: var(--text);
+  --sidebar-primary: var(--accent);
+  --sidebar-primary-foreground: #0d1014;
+  --sidebar-accent: var(--surface);
+  --sidebar-accent-foreground: var(--text);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--ring);
 }
 
 @theme inline {
   --color-background: var(--bg);
   --color-foreground: var(--text);
   --font-sans: var(--font-body);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
 }
 
 body {
@@ -35,15 +55,34 @@ body {
   font-family: var(--font-body), system-ui, sans-serif;
 }
 
-html.chat-page,
 body.chat-page {
-  min-height: 100%;
-  overflow-x: hidden;
-  overflow-y: auto;
+  height: 100dvh !important;
+  max-height: 100dvh !important;
+  overflow: hidden !important;
+  --sidebar-width: 307px;
+  --sidebar-width-icon: 3rem;
+}
+
+body.chat-page #app-root,
+body.chat-page .flex.min-h-screen {
+  height: 100% !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+}
+
+body.chat-page main {
+  height: 100% !important;
+  overflow: hidden !important;
 }
 
 body.chat-page footer {
   display: none;
+}
+
+[data-sidebar="sidebar"][data-mobile="true"] {
+  top: var(--app-header-height) !important;
+  bottom: auto !important;
+  height: calc(100svh - var(--app-header-height)) !important;
 }
 
 .font-display {
@@ -89,6 +128,85 @@ body.chat-page footer {
   }
 }
 
+@keyframes mesh-pulse {
+  0% {
+    transform: scale(1) translate(0, 0);
+    opacity: 0.3;
+  }
+  33% {
+    transform: scale(1.1) translate(5%, -5%);
+    opacity: 0.5;
+  }
+  66% {
+    transform: scale(0.9) translate(-5%, 5%);
+    opacity: 0.4;
+  }
+  100% {
+    transform: scale(1) translate(0, 0);
+    opacity: 0.3;
+  }
+}
+
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+.animate-mesh {
+  animation: mesh-pulse 15s ease-in-out infinite alternate;
+}
+
+.animate-float {
+  animation: float 6s ease-in-out infinite;
+}
+
+.glass-panel {
+  @apply border-[var(--border)] bg-[var(--bg-elev)]/70 shadow-2xl backdrop-blur-2xl;
+}
+
+.glass-panel-heavy {
+  @apply shadow-card border-[var(--border)] bg-[var(--surface)]/80 backdrop-blur-3xl;
+}
+
+.premium-gradient-bg {
+  background:
+    radial-gradient(
+      circle at 50% -20%,
+      rgba(255, 122, 26, 0.15),
+      transparent 70%
+    ),
+    radial-gradient(
+      circle at 100% 100%,
+      rgba(59, 198, 255, 0.1),
+      transparent 50%
+    ),
+    radial-gradient(
+      circle at 0% 100%,
+      rgba(255, 198, 120, 0.08),
+      transparent 50%
+    );
+}
+
+.mesh-container {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.mesh-blob {
+  position: absolute;
+  filter: blur(80px);
+  border-radius: 9999px;
+  opacity: 0.4;
+}
+
 @layer base {
   * {
     @apply border-border;
@@ -97,4 +215,63 @@ body.chat-page footer {
   body {
     @apply bg-background text-foreground;
   }
+
+  /* SLEEK MODERN SCROLLBAR */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 999px;
+    transition: background 0.2s ease;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--muted);
+  }
+
+  /* Specific override for the chat thread to make it even more subtle */
+  .chat-page *::-webkit-scrollbar-thumb {
+    background: var(--surface);
+  }
+
+  .chat-page *::-webkit-scrollbar-thumb:hover {
+    background: var(--border);
+  }
+
+  /* SIDEBAR SPECIFIC SCROLLBAR */
+  [data-sidebar="content"]::-webkit-scrollbar {
+    width: 4px;
+  }
+
+  [data-sidebar="content"]::-webkit-scrollbar-thumb {
+    background: var(--border);
+    opacity: 0.3;
+  }
+
+  [data-sidebar="content"]::-webkit-scrollbar-thumb:hover {
+    background: var(--muted);
+  }
+}
+
+.dark {
+  --sidebar: var(--bg-elev);
+  --sidebar-foreground: var(--text);
+  --sidebar-primary: var(--accent);
+  --sidebar-primary-foreground: #0d1014;
+  --sidebar-accent: var(--surface);
+  --sidebar-accent-foreground: var(--text);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--ring);
 }

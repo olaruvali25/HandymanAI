@@ -690,6 +690,7 @@ export async function POST(req: Request) {
             threadId: body.threadId as Id<"chatThreads">,
             anonymousId: anonymousId ?? undefined,
             contentText: assistantMessage,
+            actions,
           },
           token ? { token } : {},
         );
@@ -793,6 +794,7 @@ export async function POST(req: Request) {
             threadId: body.threadId as Id<"chatThreads">,
             anonymousId: anonymousId ?? undefined,
             contentText: assistantMessage,
+            actions,
           },
           token ? { token } : {},
         );

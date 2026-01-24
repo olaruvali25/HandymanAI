@@ -2,11 +2,13 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useAuthActions } from "@convex-dev/auth/react";
 import { useConvexAuth } from "convex/react";
 
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Spinner } from "@/components/ui/spinner";
 import Container from "./Container";
 import { useUser } from "@/lib/useUser";
 
@@ -23,6 +25,28 @@ export default function Navbar() {
     return cached && Number.isFinite(Number(cached)) ? Number(cached) : null;
   });
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const headerRef = useRef<HTMLElement | null>(null);
+
+  useLayoutEffect(() => {
+    const header = headerRef.current;
+    if (!header || typeof window === "undefined") return;
+
+    const updateHeaderHeight = () => {
+      const height = header.getBoundingClientRect().height;
+      document.documentElement.style.setProperty(
+        "--app-header-height",
+        `${height}px`,
+      );
+    };
+
+    updateHeaderHeight();
+    const observer = new ResizeObserver(() => updateHeaderHeight());
+    observer.observe(header);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, []);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -74,7 +98,10 @@ export default function Navbar() {
   }, [isAuthenticated]);
 
   return (
-    <header className="sticky top-0 z-40 border-b border-[var(--border)] bg-[color:var(--bg)]/90 backdrop-blur">
+    <header
+      ref={headerRef}
+      className="sticky top-0 z-40 border-b border-[var(--border)] bg-[color:var(--bg)]/90 backdrop-blur"
+    >
       <Container>
         <div className="flex flex-col gap-4 py-4 md:flex-row md:items-center md:justify-between">
           <Link
@@ -101,7 +128,13 @@ export default function Navbar() {
             </Link>
           </nav>
           <div className="flex items-center gap-3 text-sm">
-            {!isLoading && isAuthenticated ? (
+            {isLoading ? (
+              <div className="flex items-center gap-3">
+                <Spinner className="text-[var(--accent)]" />
+                <Skeleton className="h-8 w-24 rounded-full bg-white/10" />
+                <Skeleton className="h-9 w-20 rounded-full bg-white/10" />
+              </div>
+            ) : isAuthenticated ? (
               <>
                 <div
                   ref={menuRef}
@@ -172,6 +205,7 @@ export default function Navbar() {
                   type="button"
                   variant="outline"
                   size="sm"
+                  className="border-[var(--border)] bg-[var(--bg-elev)] text-[var(--text)] hover:bg-[var(--surface)] hover:text-[var(--text)]"
                   onClick={async () => {
                     await signOut();
                     router.push("/");

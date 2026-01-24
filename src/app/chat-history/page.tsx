@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import Container from "@/components/Container";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Spinner } from "@/components/ui/spinner";
 import { useConvexAuth, useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
 
@@ -54,9 +56,14 @@ export default function ChatHistoryPage() {
         <div className="mx-auto max-w-5xl">
           <div className="flex flex-col gap-6">
             <div>
-              <h1 className="font-display text-4xl font-semibold text-white sm:text-5xl">
-                Chat history
-              </h1>
+              <div className="flex items-center gap-3">
+                <h1 className="font-display text-4xl font-semibold text-white sm:text-5xl">
+                  Chat history
+                </h1>
+                {isLoading ? (
+                  <Spinner className="text-[var(--accent)]" />
+                ) : null}
+              </div>
               <p className="mt-4 max-w-2xl text-base text-[var(--muted)] sm:text-lg">
                 Find past fixes, revisit steps, and pick up where you left off.
               </p>
@@ -76,7 +83,20 @@ export default function ChatHistoryPage() {
               />
             </div>
 
-            {!isLoading && (!isAuthenticated || !canUseChatHistory) ? (
+            {isLoading ? (
+              <div className="grid gap-4">
+                {Array.from({ length: 4 }).map((_, index) => (
+                  <div
+                    key={`chat-history-skeleton-${index}`}
+                    className="rounded-2xl border border-white/10 bg-white/5 p-5"
+                  >
+                    <Skeleton className="h-5 w-48 bg-white/10" />
+                    <Skeleton className="mt-3 h-4 w-full bg-white/10" />
+                    <Skeleton className="mt-2 h-4 w-5/6 bg-white/10" />
+                  </div>
+                ))}
+              </div>
+            ) : !isAuthenticated || !canUseChatHistory ? (
               <div className="rounded-2xl border border-white/10 bg-white/5 px-6 py-10 text-center">
                 <h2 className="text-xl font-semibold text-white">
                   See your chat history
@@ -126,7 +146,7 @@ export default function ChatHistoryPage() {
                     </div>
                     <div className="mt-4">
                       <Link
-                        href={`/?thread=${chat.id}`}
+                        href={`/c/${chat.id}`}
                         className="text-xs font-semibold tracking-[0.2em] text-[var(--accent)] uppercase transition hover:text-[var(--accent-soft)]"
                       >
                         Open chat

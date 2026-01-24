@@ -11,6 +11,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   type ChangeEvent,
   type CSSProperties,
   type Dispatch,
@@ -212,7 +213,7 @@ const EmptyStateHero = ({
     </h1>
     <p className="mt-6 max-w-lg text-lg text-[var(--muted)] opacity-80">
       Snap a photo or describe the issue. From leaky faucets to broken
-      appliances, I'm here to guide you.
+      appliances, {"I'm"} here to guide you.
     </p>
 
     <div className="mt-12 flex flex-wrap justify-center gap-3 opacity-90">
@@ -295,6 +296,13 @@ const EntitlementsContext = createContext<{
 });
 
 const useEntitlements = () => useContext(EntitlementsContext);
+
+const useIsClient = () =>
+  useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false,
+  );
 
 const ImageViewerContext = createContext<{
   openImage: (url: string, name?: string) => void;
@@ -1043,7 +1051,7 @@ const Composer = ({
   const [isListening, setIsListening] = useState(false);
   const [micError, setMicError] = useState<string | null>(null);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [isPopoverReady, setIsPopoverReady] = useState(false);
+  const isPopoverReady = useIsClient();
   const filesWithIndex = useMemo(
     () => selectedFiles.map((file, index) => ({ file, index })),
     [selectedFiles],
@@ -1056,29 +1064,25 @@ const Composer = ({
     () => filesWithIndex.filter(({ file }) => !file.type.startsWith("image/")),
     [filesWithIndex],
   );
-  const [imagePreviews, setImagePreviews] = useState<
-    Array<{ index: number; url: string; name: string }>
-  >([]);
+  const imagePreviews = useMemo(
+    () =>
+      imageItems.map(({ file, index }) => ({
+        index,
+        name: file.name,
+        url: URL.createObjectURL(file),
+      })),
+    [imageItems],
+  );
 
   useEffect(() => {
-    const next = imageItems.map(({ file, index }) => ({
-      index,
-      name: file.name,
-      url: URL.createObjectURL(file),
-    }));
-    setImagePreviews(next);
     return () => {
-      next.forEach((preview) => URL.revokeObjectURL(preview.url));
+      imagePreviews.forEach((preview) => URL.revokeObjectURL(preview.url));
     };
-  }, [imageItems]);
+  }, [imagePreviews]);
 
   useEffect(() => {
     draftRef.current = draft;
   }, [draft]);
-
-  useEffect(() => {
-    setIsPopoverReady(true);
-  }, []);
 
   const isEmpty = !draft.trim() && selectedFiles.length === 0;
 
@@ -1165,7 +1169,7 @@ const Composer = ({
     return () => {
       speechRef.current = null;
     };
-  }, [api]);
+  }, [api, setDraft]);
 
   const handleMicClick = () => {
     if (!canVoice) return;

@@ -680,12 +680,12 @@ const SidebarMenuSkeleton = React.forwardRef<
     >
       {showIcon && (
         <Skeleton
-          className="size-4 rounded-md bg-sidebar-foreground/15"
+          className="bg-sidebar-foreground/15 size-4 rounded-md"
           data-sidebar="menu-skeleton-icon"
         />
       )}
       <Skeleton
-        className="h-4 max-w-[--skeleton-width] flex-1 bg-sidebar-foreground/10"
+        className="bg-sidebar-foreground/10 h-4 max-w-[--skeleton-width] flex-1"
         data-sidebar="menu-skeleton-text"
         style={
           {

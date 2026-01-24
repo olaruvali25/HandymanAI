@@ -70,6 +70,7 @@ Use Bun locally for all commands:
 ## System Design
 
 HandymanAI is a full-stack Next.js + Convex application with:
+
 - **Frontend:** Next.js App Router, React 19, Tailwind CSS 4, shadcn/ui
 - **Backend:** Convex (real-time database + serverless functions)
 - **AI:** OpenAI API (text + vision models)
@@ -79,6 +80,7 @@ HandymanAI is a full-stack Next.js + Convex application with:
 ## Critical Data Flows
 
 ### Chat Flow (Core User Experience)
+
 1. User sends message via `src/components/chat/GrokThread.tsx`
 2. Message posted to `POST /api/ai` (Next.js route handler)
 3. Server validates credits via `convex/entitlements.ts`
@@ -87,11 +89,13 @@ HandymanAI is a full-stack Next.js + Convex application with:
 6. Chat history persisted to Convex `chatThreads` and `chatMessages` tables
 
 ### Guest → User Identity Merge
+
 - Guests store anonymous ID in `fixly_anon` cookie
 - On signup/login: `convex/entitlements.ts` (`syncAnonymousToUser`) merges credits and chat threads
 - Critical: Check both `anonymousUsers` and `users` tables when querying entitlements
 
 ### Credits System
+
 - User credits: `users.credits` (primary table)
 - Anonymous credits: `anonymousUsers.credits`
 - Charges tracked in `creditCharges` table (indexed by user/anonymous + turnId + stage)
@@ -101,18 +105,21 @@ HandymanAI is a full-stack Next.js + Convex application with:
 ## Key Implementation Patterns
 
 ### OpenAI Integration
+
 - Base model: `env.OPENAI_MODEL` (defaults to "gpt-5.2")
 - Vision: Auto-downgrades to "gpt-4o-mini" if attachments present and base model lacks vision
 - Prompts: Loaded from `src/ai/prompts/` (scope-control.txt, primary.txt)
 - Scope caching: 6-hour TTL cache (BoundedMap) to avoid re-prompting for thread context
 
 ### Authentication
+
 - Session state in cookie + Convex Auth
 - Routes protected via `middleware.ts` (checks `/tasks/*`)
 - Client-side: `ConvexAuthNextjsServerProvider` (server) + `ConvexAuthNextjsProvider` (client)
 - Auth routes: `src/app/api/auth/route.ts` (session) + `src/app/api/auth/[...auth]/route.ts` (OAuth proxy)
 
 ### Chat History Persistence
+
 - Uses Convex queries directly (not via `/api/ai`)
 - Functions in `convex/chatHistory.ts`
 - Threads indexed by userId or anonymousId; messages indexed by threadId + createdAt
@@ -128,6 +135,7 @@ HandymanAI is a full-stack Next.js + Convex application with:
 ## Entitlements & Capabilities
 
 User capabilities determined by plan and returned as `ClientEntitlements` object:
+
 - `userHasAccount`: boolean
 - `userPlan`: "none" | "premium" | (other tiers)
 - `credits`: number (optional)

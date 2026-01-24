@@ -21,6 +21,7 @@ import { MODELS } from "@/constants/model";
 
 const Logo: FC = () => {
 return (
+
 <div className="flex items-center gap-2 px-2 font-medium text-sm">
 <Image
         src={icon}
@@ -34,6 +35,7 @@ return (
 
 const Sidebar: FC<{ collapsed?: boolean }> = ({ collapsed }) => {
 return (
+
 <aside
 className={cn(
 "flex h-full flex-col bg-muted/30 transition-all duration-200",
@@ -63,6 +65,7 @@ return (
 </Button>
 </SheetTrigger>
 <SheetContent side="left" className="w-70 p-0">
+
 <div className="flex h-14 items-center px-4">
 <Logo />
 </div>
@@ -110,6 +113,7 @@ sidebarCollapsed: boolean;
 onToggleSidebar: () => void;
 }> = ({ sidebarCollapsed, onToggleSidebar }) => {
 return (
+
 <header className="flex h-14 shrink-0 items-center gap-2 px-4">
 <MobileSidebar />
 <TooltipIconButton
@@ -139,6 +143,7 @@ export const Shadcn: FC = () => {
 const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
 return (
+
 <div className="flex h-full w-full bg-background [--primary-foreground:0_0%_98%] [--primary:0_0%_9%] dark:[--primary-foreground:0_0%_9%] dark:[--primary:0_0%_98%]">
 <div className="hidden md:block">
 <Sidebar collapsed={sidebarCollapsed} />

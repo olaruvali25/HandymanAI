@@ -1442,7 +1442,9 @@ const Composer = ({
                         <SelectValue placeholder="Automatic Detection" />
                       </SelectTrigger>
                       <SelectContent className="border-[var(--border)] bg-[var(--bg)] text-[var(--text)]">
-                        <SelectItem value="auto">Automatic Detection</SelectItem>
+                        <SelectItem value="auto">
+                          Automatic Detection
+                        </SelectItem>
                         <SelectItem value="en-US">English (US)</SelectItem>
                         <SelectItem value="es-ES">Spanish</SelectItem>
                         <SelectItem value="de-DE">German</SelectItem>
@@ -2676,34 +2678,36 @@ const ChatThreadContent = ({
                         <ThreadPrimitive.Empty>
                           {!isThreadTransitioning &&
                             !shouldShowThreadLoading && (
-                            <div className="flex h-full w-full flex-col overflow-y-auto">
-                              <div className="mx-auto flex w-full max-w-3xl flex-col items-center px-4 pt-[10vh] pb-20">
-                                {header || (
-                                  <EmptyStateHero
-                                    onSuggestionClick={handleSuggestionClick}
-                                  />
-                                )}
+                              <div className="flex h-full w-full flex-col overflow-y-auto">
+                                <div className="mx-auto flex w-full max-w-3xl flex-col items-center px-4 pt-[10vh] pb-20">
+                                  {header || (
+                                    <EmptyStateHero
+                                      onSuggestionClick={handleSuggestionClick}
+                                    />
+                                  )}
 
-                                <div className="animate-in slide-in-from-bottom-4 mt-12 w-full duration-700">
-                                  <Composer
-                                    selectedFiles={selectedFiles}
-                                    setSelectedFiles={setSelectedFiles}
-                                    draft={draft}
-                                    setDraft={setDraft}
-                                    selectedLanguage={selectedLanguage}
-                                    setSelectedLanguage={setSelectedLanguage}
-                                    lastUserText={lastUserText}
-                                    speechEnabled={speechEnabled}
-                                    setSpeechEnabled={setSpeechEnabled}
-                                    voiceGender={voiceGender}
-                                    setVoiceGender={setVoiceGender}
-                                    canVoice={entitlements.capabilities.voice}
-                                    canPhotos={entitlements.capabilities.photos}
-                                  />
+                                  <div className="animate-in slide-in-from-bottom-4 mt-12 w-full duration-700">
+                                    <Composer
+                                      selectedFiles={selectedFiles}
+                                      setSelectedFiles={setSelectedFiles}
+                                      draft={draft}
+                                      setDraft={setDraft}
+                                      selectedLanguage={selectedLanguage}
+                                      setSelectedLanguage={setSelectedLanguage}
+                                      lastUserText={lastUserText}
+                                      speechEnabled={speechEnabled}
+                                      setSpeechEnabled={setSpeechEnabled}
+                                      voiceGender={voiceGender}
+                                      setVoiceGender={setVoiceGender}
+                                      canVoice={entitlements.capabilities.voice}
+                                      canPhotos={
+                                        entitlements.capabilities.photos
+                                      }
+                                    />
+                                  </div>
                                 </div>
                               </div>
-                            </div>
-                          )}
+                            )}
                         </ThreadPrimitive.Empty>
 
                         <div
@@ -2764,9 +2768,8 @@ const ChatThreadContent = ({
                   )}
                 >
                   {/* EMPTY STATE HERO + COMPOSER (Stand-alone mode) */}
-                <ThreadPrimitive.Empty>
-                    {!isThreadTransitioning &&
-                      !shouldShowThreadLoading && (
+                  <ThreadPrimitive.Empty>
+                    {!isThreadTransitioning && !shouldShowThreadLoading && (
                       <div className="flex h-full w-full flex-col overflow-y-auto">
                         <div className="mx-auto flex w-full max-w-3xl flex-col items-center px-4 pt-[10vh] pb-20">
                           {header || (
@@ -2992,11 +2995,7 @@ const ChatHistorySidebar = ({
           <SidebarContent>
             {isSidebarLoading ? (
               <div className="px-2 py-2">
-                <SidebarMenuSkeleton
-                  className="mb-2"
-                  showIcon
-                  width="76%"
-                />
+                <SidebarMenuSkeleton className="mb-2" showIcon width="76%" />
                 <SidebarMenuSkeleton className="mb-2" width="82%" />
                 <SidebarMenuSkeleton className="mb-2" width="65%" />
                 <SidebarMenuSkeleton className="mb-2" width="68%" />

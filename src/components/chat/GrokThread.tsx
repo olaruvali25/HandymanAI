@@ -1096,10 +1096,36 @@ const Composer = ({
     fileInputRef.current?.click();
   };
 
-  const addFiles = (files: File[]) => {
-    if (files.length === 0) return;
-    setSelectedFiles((prev) => [...prev, ...files]);
-  };
+  const addFiles = useCallback(
+    (files: File[]) => {
+      if (files.length === 0) return;
+      setSelectedFiles((prev) => [...prev, ...files]);
+    },
+    [setSelectedFiles],
+  );
+
+  const handlePaste = useCallback(
+    (event: React.ClipboardEvent) => {
+      if (!canPhotos) return;
+
+      const items = event.clipboardData?.items;
+      if (!items) return;
+
+      const pastedFiles: File[] = [];
+      for (let i = 0; i < items.length; i += 1) {
+        if (items[i]?.type.indexOf("image") !== -1) {
+          const file = items[i]?.getAsFile();
+          if (file) pastedFiles.push(file);
+        }
+      }
+
+      if (pastedFiles.length > 0) {
+        event.preventDefault();
+        addFiles(pastedFiles);
+      }
+    },
+    [canPhotos, addFiles],
+  );
 
   const handleCameraChange = (event: ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files ?? []).filter((file) =>
@@ -1377,6 +1403,7 @@ const Composer = ({
               submitOnEnter={false}
               value={draft}
               onChange={(event) => setDraft(event.target.value)}
+              onPaste={handlePaste}
               onKeyDown={async (e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();

@@ -156,7 +156,7 @@ Fields:
 - `actorType`: "user" | "anonymous"
 - `userId?`: Id<"users">
 - `anonymousId?`: string
-- `kind`: "anon_initial_20" | "login_bonus_10" | "free_48h_15" | "plan_reset" | "plan_upgrade_add" | "plan_renewal_reset" | "topup_add" | "chat_user_send" | "chat_assistant_reply" | "out_of_credits_block"
+- `kind`: "anon_initial_20" | "login_bonus_10" | "free_48h_15" | "plan_reset" | "plan_upgrade_add" | "plan_renewal_reset" | "topup_add" | "chat_user_send" | "chat_assistant_reply" | "chat_text_turn" | "chat_image_turn" | "out_of_credits_block"
 - `amount`: number
 - `balanceAfter`: number
 - `stripeEventId?`: string

@@ -121,6 +121,8 @@ const schema = defineSchema({
       v.literal("topup_add"),
       v.literal("chat_user_send"),
       v.literal("chat_assistant_reply"),
+      v.literal("chat_text_turn"),
+      v.literal("chat_image_turn"),
       v.literal("out_of_credits_block"),
     ),
     amount: v.number(),

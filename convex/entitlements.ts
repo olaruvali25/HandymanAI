@@ -3,26 +3,26 @@ import { v } from "convex/values";
 
 import type { Id } from "./_generated/dataModel";
 import { mutation, query, type MutationCtx } from "./_generated/server";
-import { CREDIT_COSTS } from "./billingConfig";
 import { findLedgerEntryByTurnKind, insertLedgerEntry } from "./creditLedger";
 
 const DEFAULT_ANON_CREDITS = 20;
 const DEFAULT_USER_CREDITS = 0;
 
-const assertValidUserCost = (cost: number) => {
-  const allowed =
-    cost === CREDIT_COSTS.userMessage ||
-    cost === CREDIT_COSTS.userMessage + CREDIT_COSTS.imageSurcharge;
-  if (!allowed) {
+const CHAT_TEXT_TURN_COST = 4;
+const CHAT_IMAGE_TURN_COST_PER_IMAGE = 13;
+
+const assertValidChatTurnCost = (cost: number) => {
+  const isTextTurn = cost === CHAT_TEXT_TURN_COST;
+  const isImageTurn =
+    cost >= CHAT_IMAGE_TURN_COST_PER_IMAGE &&
+    cost % CHAT_IMAGE_TURN_COST_PER_IMAGE === 0;
+  if (!isTextTurn && !isImageTurn) {
     throw new Error("Invalid user credit cost.");
   }
 };
 
-const assertValidAssistantCost = (cost: number) => {
-  if (cost !== CREDIT_COSTS.assistantReply) {
-    throw new Error("Invalid assistant credit cost.");
-  }
-};
+const chatTurnKindForCost = (cost: number) =>
+  cost === CHAT_TEXT_TURN_COST ? "chat_text_turn" : "chat_image_turn";
 
 const ensureUserCredits = async (ctx: MutationCtx, userId: Id<"users">) => {
   const user = await ctx.db.get(userId);
@@ -127,7 +127,7 @@ export const reserveCredits = mutation({
     threadId: v.optional(v.id("chatThreads")),
   },
   handler: async (ctx, args) => {
-    assertValidUserCost(args.cost);
+    assertValidChatTurnCost(args.cost);
     const userId = await getAuthUserId(ctx);
     const actor = userId
       ? { userId }
@@ -153,6 +153,7 @@ export const reserveCredits = mutation({
     }
 
     const now = Date.now();
+    const kind = chatTurnKindForCost(args.cost);
     if (actor.userId) {
       const { credits } = await ensureUserCredits(ctx, actor.userId);
       const minimum =
@@ -178,7 +179,7 @@ export const reserveCredits = mutation({
       await insertLedgerEntry(ctx, {
         actorType: "user",
         userId: actor.userId,
-        kind: "chat_user_send",
+        kind,
         amount: -args.cost,
         balanceAfter: nextCredits,
         threadId: args.threadId ?? undefined,
@@ -213,7 +214,7 @@ export const reserveCredits = mutation({
     await insertLedgerEntry(ctx, {
       actorType: "anonymous",
       anonymousId: actor.anonymousId,
-      kind: "chat_user_send",
+      kind,
       amount: -args.cost,
       balanceAfter: nextCredits,
       threadId: args.threadId ?? undefined,
@@ -232,7 +233,6 @@ export const chargeAssistantCredits = mutation({
     threadId: v.optional(v.id("chatThreads")),
   },
   handler: async (ctx, args) => {
-    assertValidAssistantCost(args.cost);
     const userId = await getAuthUserId(ctx);
     const actor = userId
       ? { userId }
@@ -243,88 +243,16 @@ export const chargeAssistantCredits = mutation({
     if (!actor) {
       throw new Error("Missing anonymousId for anonymous usage.");
     }
-
-    const existingCharge = await findCharge(
-      ctx,
-      actor,
-      args.turnId,
-      "assistant",
-    );
-    if (existingCharge) {
-      if (actor.userId) {
-        const { credits } = await ensureUserCredits(ctx, actor.userId);
-        return { credits };
-      }
-      const { credits } = await ensureAnonymousUser(
-        ctx,
-        actor.anonymousId as string,
-      );
+    if (actor.userId) {
+      const { credits } = await ensureUserCredits(ctx, actor.userId);
       return { credits };
     }
 
-    const now = Date.now();
-    if (actor.userId) {
-      const { credits } = await ensureUserCredits(ctx, actor.userId);
-      if (credits < args.cost) {
-        throw new Error("INSUFFICIENT_CREDITS");
-      }
-      const nextCredits = credits - args.cost;
-      await ctx.db.patch(actor.userId, {
-        credits: nextCredits,
-        updatedAt: now,
-      });
-      await ctx.db.insert("creditCharges", {
-        actorType: "user",
-        userId: actor.userId,
-        turnId: args.turnId,
-        stage: "assistant",
-        amount: args.cost,
-        createdAt: now,
-      });
-      await insertLedgerEntry(ctx, {
-        actorType: "user",
-        userId: actor.userId,
-        kind: "chat_assistant_reply",
-        amount: -args.cost,
-        balanceAfter: nextCredits,
-        threadId: args.threadId ?? undefined,
-        turnId: args.turnId,
-        createdAt: now,
-      });
-      return { credits: nextCredits };
-    }
-
-    const { doc, credits } = await ensureAnonymousUser(
+    const { credits } = await ensureAnonymousUser(
       ctx,
       actor.anonymousId as string,
     );
-    if (credits < args.cost) {
-      throw new Error("INSUFFICIENT_CREDITS");
-    }
-    const nextCredits = credits - args.cost;
-    await ctx.db.patch(doc._id, {
-      credits: nextCredits,
-      updatedAt: now,
-    });
-    await ctx.db.insert("creditCharges", {
-      actorType: "anonymous",
-      anonymousId: actor.anonymousId,
-      turnId: args.turnId,
-      stage: "assistant",
-      amount: args.cost,
-      createdAt: now,
-    });
-    await insertLedgerEntry(ctx, {
-      actorType: "anonymous",
-      anonymousId: actor.anonymousId,
-      kind: "chat_assistant_reply",
-      amount: -args.cost,
-      balanceAfter: nextCredits,
-      threadId: args.threadId ?? undefined,
-      turnId: args.turnId,
-      createdAt: now,
-    });
-    return { credits: nextCredits };
+    return { credits };
   },
 });
 

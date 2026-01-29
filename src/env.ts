@@ -8,11 +8,17 @@ export const env = createEnv({
   },
   client: {
     NEXT_PUBLIC_CONVEX_URL: z.string().url().optional(),
+    NEXT_PUBLIC_SHOW_ENTITLEMENTS_DEBUG: z
+      .enum(["true", "false"])
+      .transform((value) => value === "true")
+      .optional(),
   },
   runtimeEnv: {
     OPENAI_API_KEY: process.env.OPENAI_API_KEY,
     OPENAI_MODEL: process.env.OPENAI_MODEL,
     NEXT_PUBLIC_CONVEX_URL: process.env.NEXT_PUBLIC_CONVEX_URL,
+    NEXT_PUBLIC_SHOW_ENTITLEMENTS_DEBUG:
+      process.env.NEXT_PUBLIC_SHOW_ENTITLEMENTS_DEBUG,
   },
   emptyStringAsUndefined: true,
 });

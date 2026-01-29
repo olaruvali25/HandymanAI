@@ -10,6 +10,7 @@ import {
 } from "./_generated/server";
 import {
   chatAttachmentValidator,
+  chatMessageActionValidator,
   chatMessageRoleValidator,
 } from "./validators/chat";
 import { insertLedgerEntry } from "./creditLedger";
@@ -122,6 +123,14 @@ export const getThreadMessages = query({
         role: message.role,
         contentText: message.contentText,
         createdAt: message.createdAt,
+        actions: (message.actions ?? undefined) as
+          | {
+              type: "link";
+              label: string;
+              href: string;
+              variant?: "primary" | "secondary";
+            }[]
+          | undefined,
         attachments: await hydrateAttachments(
           ctx,
           (message.attachments ?? []) as {
@@ -166,6 +175,14 @@ export const getThreadMessagesForActor = query({
         role: message.role,
         contentText: message.contentText,
         createdAt: message.createdAt,
+        actions: (message.actions ?? undefined) as
+          | {
+              type: "link";
+              label: string;
+              href: string;
+              variant?: "primary" | "secondary";
+            }[]
+          | undefined,
         attachments: await hydrateAttachments(
           ctx,
           (message.attachments ?? []) as {
@@ -179,6 +196,31 @@ export const getThreadMessagesForActor = query({
         ),
       })),
     );
+  },
+});
+
+export const getThreadSummaryForActor = query({
+  args: { threadId: v.id("chatThreads"), anonymousId: v.optional(v.string()) },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    const thread = await ctx.db.get(args.threadId);
+    if (!thread) {
+      return null;
+    }
+    const hasUserAccess = userId && thread.userId === userId;
+    const hasGuestAccess =
+      args.anonymousId &&
+      (thread.anonymousId === args.anonymousId ||
+        thread.guestChatId === args.anonymousId);
+    if (!hasUserAccess && !hasGuestAccess) {
+      return null;
+    }
+    return {
+      id: thread._id,
+      title: thread.title,
+      updatedAt: thread.updatedAt,
+      lastPreview: thread.lastPreview,
+    };
   },
 });
 
@@ -220,6 +262,7 @@ export const appendMessages = mutation({
         contentText: v.string(),
         createdAt: v.optional(v.number()),
         attachments: v.optional(v.array(chatAttachmentValidator)),
+        actions: v.optional(v.array(chatMessageActionValidator)),
       }),
     ),
   },
@@ -249,6 +292,7 @@ export const appendMessages = mutation({
         role: message.role,
         contentText: message.contentText,
         attachments: message.attachments ?? [],
+        actions: message.actions ?? undefined,
         createdAt: message.createdAt ?? now,
       });
       if (message.role === "user") {
@@ -460,6 +504,7 @@ export const appendAssistantMessage = mutation({
     anonymousId: v.optional(v.string()),
     contentText: v.string(),
     attachments: v.optional(v.array(chatAttachmentValidator)),
+    actions: v.optional(v.array(chatMessageActionValidator)),
   },
   handler: async (ctx, args) => {
     const { userId, thread } = await assertThreadAccess(
@@ -476,6 +521,7 @@ export const appendAssistantMessage = mutation({
       role: "assistant",
       contentText: args.contentText,
       attachments: args.attachments ?? [],
+      actions: args.actions ?? undefined,
       createdAt: now,
     });
     await ctx.db.patch(thread._id, {

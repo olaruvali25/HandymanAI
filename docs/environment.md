@@ -51,6 +51,13 @@ Copy the tracked template and fill values:
 - **Where to set it:** `.env.local`
 - **Used by:** `src/app/api/ai/route.ts`
 
+#### `NEXT_PUBLIC_SHOW_ENTITLEMENTS_DEBUG` (optional debug flag)
+
+- **What it is:** Shows the Entitlements debug overlay when set to `true`.
+- **Where to set it:** `.env.local`
+- **Used by:** `src/components/chat/GrokThread.tsx`
+- **Notes:** This is client-side (`NEXT_PUBLIC_*`) and should be `true` or `false`.
+
 ### Important behavior notes
 
 - Changing `.env.local` usually requires restarting `next dev`.

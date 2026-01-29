@@ -4,6 +4,7 @@ import { v } from "convex/values";
 import { planSchema } from "./billingConfig";
 import {
   chatAttachmentValidator,
+  chatMessageActionValidator,
   chatMessageRoleValidator,
 } from "./validators/chat";
 
@@ -76,6 +77,7 @@ const schema = defineSchema({
     role: chatMessageRoleValidator,
     contentText: v.string(),
     attachments: v.optional(v.array(chatAttachmentValidator)),
+    actions: v.optional(v.array(chatMessageActionValidator)),
     createdAt: v.number(),
   }).index("by_thread_createdAt", ["threadId", "createdAt"]),
   creditCharges: defineTable({
@@ -119,6 +121,8 @@ const schema = defineSchema({
       v.literal("topup_add"),
       v.literal("chat_user_send"),
       v.literal("chat_assistant_reply"),
+      v.literal("chat_text_turn"),
+      v.literal("chat_image_turn"),
       v.literal("out_of_credits_block"),
     ),
     amount: v.number(),

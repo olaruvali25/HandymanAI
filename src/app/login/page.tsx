@@ -146,7 +146,7 @@ export default function LoginPage() {
                 ) : null}
                 <div className="space-y-3">
                   <Button
-                    className="w-full border-white/20 text-white hover:bg-white/10"
+                    className="w-full border-[var(--border)] bg-[var(--bg-elev)] text-[var(--text)] hover:bg-[var(--surface)] hover:text-[var(--text)]"
                     type="button"
                     variant="outline"
                     disabled={isSubmitting || isOauthSubmitting !== null}
@@ -157,7 +157,7 @@ export default function LoginPage() {
                       : "Continue with Google"}
                   </Button>
                   <Button
-                    className="w-full border-white/20 text-white hover:bg-white/10"
+                    className="w-full border-[var(--border)] bg-[var(--bg-elev)] text-[var(--text)] hover:bg-[var(--surface)] hover:text-[var(--text)]"
                     type="button"
                     variant="outline"
                     disabled={isSubmitting || isOauthSubmitting !== null}
@@ -211,7 +211,7 @@ export default function LoginPage() {
                 ) : null}
 
                 <Button
-                  className="w-full"
+                  className="w-full bg-[var(--accent)] text-black hover:bg-[var(--accent-soft)]"
                   type="submit"
                   disabled={isSubmitting}
                 >

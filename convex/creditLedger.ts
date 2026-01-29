@@ -13,6 +13,8 @@ export const CREDIT_LEDGER_KINDS = [
   "topup_add",
   "chat_user_send",
   "chat_assistant_reply",
+  "chat_text_turn",
+  "chat_image_turn",
   "out_of_credits_block",
 ] as const;
 
@@ -28,6 +30,8 @@ export const creditLedgerKindSchema = v.union(
   v.literal("topup_add"),
   v.literal("chat_user_send"),
   v.literal("chat_assistant_reply"),
+  v.literal("chat_text_turn"),
+  v.literal("chat_image_turn"),
   v.literal("out_of_credits_block"),
 );
 

@@ -9,9 +9,10 @@ Browser (Next.js UI)
 
 ## Core user flows
 
-### Chat flow (`/`)
+### Chat flow (`/` and `/c/[threadId]`)
 
 - UI: `src/app/_components/home-page-client.tsx` mounts `src/components/chat/GrokThread.tsx`
+- Deep links: thread-specific URLs live at `/c/[threadId]`; `/` represents a new/empty chat
 - Runtime: `@assistant-ui/react` drives a “thread” and calls the server adapter.
 - Server: `POST /api/ai` streams assistant output and enforces credits.
 

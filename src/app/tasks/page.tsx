@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { Spinner } from "@/components/ui/spinner";
 
 export default function TasksPage() {
   const { isAuthenticated, isLoading } = useConvexAuth();
@@ -28,7 +29,10 @@ export default function TasksPage() {
     return (
       <section className="py-16 lg:py-24">
         <Container>
-          <div className="text-sm text-[var(--muted)]">Loading session…</div>
+          <div className="flex items-center gap-3 text-sm text-[var(--muted)]">
+            <Spinner className="text-[var(--accent)]" />
+            <span>Loading session…</span>
+          </div>
         </Container>
       </section>
     );

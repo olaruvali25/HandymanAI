@@ -41,9 +41,8 @@ const MAX_MESSAGE_LENGTH = 2000;
 const MAX_TOTAL_CHARS = 12000;
 const IS_DEV = process.env.NODE_ENV === "development";
 const STREAMING_DISABLED = process.env.FIXLY_DISABLE_STREAMING === "1";
-const USER_MESSAGE_COST = 2;
-const IMAGE_SURCHARGE_COST = 15;
-const ASSISTANT_REPLY_COST = 2;
+const TEXT_TURN_COST = 4;
+const IMAGE_TURN_COST_PER_IMAGE = 13;
 const SCOPE_MODEL = "gpt-4.1-mini";
 const PRIMARY_MODEL = "gpt-4.1";
 
@@ -633,10 +632,13 @@ export async function POST(req: Request) {
     rawAttachments,
     token,
   );
-  const hasImageAttachments = attachments.length > 0;
-  const userCost =
-    USER_MESSAGE_COST + (hasImageAttachments ? IMAGE_SURCHARGE_COST : 0);
-  const assistantCost = ASSISTANT_REPLY_COST;
+  const imageCount = attachments.reduce((count, attachment) => {
+    if (attachment.type?.startsWith("image/")) return count + 1;
+    if (attachment.dataUrl?.startsWith("data:image/")) return count + 1;
+    return count;
+  }, 0);
+  const totalCost =
+    imageCount > 0 ? IMAGE_TURN_COST_PER_IMAGE * imageCount : TEXT_TURN_COST;
   const turnId = buildTurnId(body.messages, attachments);
 
   let currentCredits = 0;
@@ -653,89 +655,6 @@ export async function POST(req: Request) {
     console.error("[ai] credits snapshot error:", error);
   }
 
-  const requiredCredits = userCost + assistantCost;
-  if (currentCredits < requiredCredits) {
-    let plan: string | null = null;
-    if (token) {
-      try {
-        const me = await fetchQuery(api.users.me, {}, token ? { token } : {});
-        plan = typeof me?.plan === "string" ? me.plan : null;
-      } catch {
-        plan = null;
-      }
-    }
-
-    const { assistantMessage, actions } = buildOutOfCreditsPayload({
-      userHasAccount,
-      plan,
-    });
-
-    try {
-      await fetchMutation(
-        creditsApi.entitlements.recordOutOfCredits,
-        {
-          anonymousId: anonymousId ?? undefined,
-          turnId,
-          threadId: body.threadId,
-        },
-        token ? { token } : {},
-      );
-    } catch {}
-
-    if (body.threadId) {
-      try {
-        await fetchMutation(
-          api.chatHistory.appendAssistantMessage,
-          {
-            threadId: body.threadId as Id<"chatThreads">,
-            anonymousId: anonymousId ?? undefined,
-            contentText: assistantMessage,
-          },
-          token ? { token } : {},
-        );
-      } catch {}
-    }
-
-    const entitlements = buildClientEntitlements({
-      userHasAccount,
-      credits: currentCredits,
-    });
-
-    const encoder = new TextEncoder();
-    const headers = new Headers({
-      "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache, no-transform",
-      Connection: "keep-alive",
-    });
-    headers.set("X-User-Has-Account", userHasAccount ? "1" : "0");
-    headers.set("X-Credits", String(currentCredits));
-    if (anonymousId && (!fromCookie || shouldSetAnonCookie)) {
-      headers.append("Set-Cookie", buildCookieHeader(ANON_COOKIE, anonymousId));
-    }
-
-    const stream = new ReadableStream({
-      start(controller) {
-        const sendEvent = (event: string, data: object) => {
-          controller.enqueue(
-            encoder.encode(
-              `event: ${event}\n` + `data: ${JSON.stringify(data)}\n\n`,
-            ),
-          );
-        };
-
-        sendEvent("meta", { entitlements });
-        if (actions.length > 0) {
-          sendEvent("actions", { actions });
-        }
-        sendEvent("delta", { text: assistantMessage });
-        sendEvent("done", {});
-        controller.close();
-      },
-    });
-
-    return new Response(stream, { headers });
-  }
-
   let creditsRemaining = 0;
   try {
     const reserve = await withTimeout(
@@ -744,8 +663,8 @@ export async function POST(req: Request) {
         {
           anonymousId: anonymousId ?? undefined,
           turnId,
-          cost: userCost,
-          minimumCredits: userCost + assistantCost,
+          cost: totalCost,
+          minimumCredits: totalCost,
           threadId: body.threadId,
         },
         token ? { token } : {},
@@ -793,6 +712,7 @@ export async function POST(req: Request) {
             threadId: body.threadId as Id<"chatThreads">,
             anonymousId: anonymousId ?? undefined,
             contentText: assistantMessage,
+            actions,
           },
           token ? { token } : {},
         );
@@ -987,23 +907,6 @@ export async function POST(req: Request) {
       logEvent("[ai] primary end", { ms: Date.now() - primaryStart });
       logEvent("[ai] response json");
 
-      try {
-        await withTimeout(
-          fetchMutation(
-            creditsApi.entitlements.chargeAssistantCredits,
-            {
-              anonymousId: anonymousId ?? undefined,
-              turnId,
-              cost: assistantCost,
-              threadId: body.threadId,
-            },
-            token ? { token } : {},
-          ),
-        );
-      } catch (error) {
-        console.error("[ai] credits charge error:", error);
-      }
-
       return applyHeaders(
         NextResponse.json({
           text: outputText,
@@ -1134,22 +1037,6 @@ export async function POST(req: Request) {
           ) {
             logEvent("[ai] primary end", { ms: Date.now() - primaryStart });
             logEvent("[ai] response stream");
-            try {
-              await withTimeout(
-                fetchMutation(
-                  creditsApi.entitlements.chargeAssistantCredits,
-                  {
-                    anonymousId: anonymousId ?? undefined,
-                    turnId,
-                    cost: assistantCost,
-                    threadId: body.threadId,
-                  },
-                  token ? { token } : {},
-                ),
-              );
-            } catch (error) {
-              console.error("[ai] credits charge error:", error);
-            }
             sendEvent("done", {});
             controller.close();
             return;

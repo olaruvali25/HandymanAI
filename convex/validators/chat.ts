@@ -16,3 +16,11 @@ export const chatAttachmentValidator = v.object({
   dataUrl: v.optional(v.string()),
 });
 export type ChatAttachment = Infer<typeof chatAttachmentValidator>;
+
+export const chatMessageActionValidator = v.object({
+  type: v.literal("link"),
+  label: v.string(),
+  href: v.string(),
+  variant: v.optional(v.union(v.literal("primary"), v.literal("secondary"))),
+});
+export type ChatMessageAction = Infer<typeof chatMessageActionValidator>;

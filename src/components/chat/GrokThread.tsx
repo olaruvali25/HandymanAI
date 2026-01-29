@@ -1247,12 +1247,14 @@ export default function GrokThread({
   inlineThread = false,
   header,
   initialThreadId = null,
+  onThreadChange,
 }: {
   onChatStart?: () => void;
   showHistorySidebar?: boolean;
   inlineThread?: boolean;
   header?: React.ReactNode;
   initialThreadId?: string | null;
+  onThreadChange?: (threadId: string | null) => void;
 }) {
   const { isAuthenticated } = useConvexAuth();
   const queryClient = useQueryClient();
@@ -1292,6 +1294,10 @@ export default function GrokThread({
   const [activeThreadId, setActiveThreadId] = useState<string | null>(
     initialThreadId,
   );
+  useEffect(() => {
+    if (!onThreadChange) return;
+    onThreadChange(activeThreadId);
+  }, [activeThreadId, onThreadChange]);
   const [isHistoryCollapsed, setIsHistoryCollapsed] = useState(false);
   const [isHistoryDrawerOpen, setIsHistoryDrawerOpen] = useState(false);
   const canUseChatHistory = isAuthenticated || Boolean(guestChatId);

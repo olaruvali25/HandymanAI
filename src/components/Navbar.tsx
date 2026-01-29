@@ -24,14 +24,8 @@ export default function Navbar() {
   const { user } = useUser();
   const displayName = user?.name || user?.email || "Account";
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [credits, setCredits] = useState<number | null>(() => {
-    if (typeof window === "undefined") return null;
-    const existing = getStoredCredits();
-    if (existing !== null) return existing;
-    const initial = ensureInitialCredits();
-    return typeof initial === "number" ? initial : null;
-  });
-  const isHydrated = typeof window !== "undefined";
+  const [credits, setCredits] = useState<number | null>(null);
+  const [isHydrated, setIsHydrated] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const updateCredits = useCallback((value: number | null | undefined) => {
     if (typeof value !== "number" || !Number.isFinite(value)) return;
@@ -63,6 +57,18 @@ export default function Navbar() {
   useEffect(() => {
     if (typeof window === "undefined") return;
     ensureAnonymousId();
+    /* eslint-disable react-hooks/set-state-in-effect */
+    setIsHydrated(true);
+    const existing = getStoredCredits();
+    if (existing !== null) {
+      setCredits(existing);
+      return;
+    }
+    const initial = ensureInitialCredits();
+    if (typeof initial === "number") {
+      setCredits(initial);
+    }
+    /* eslint-enable react-hooks/set-state-in-effect */
   }, []);
 
   useEffect(() => {

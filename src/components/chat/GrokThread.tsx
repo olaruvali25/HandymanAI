@@ -45,6 +45,11 @@ import {
   useEntitlementsQuery,
 } from "@/lib/queries/entitlements";
 import { useUserPreferencesStore } from "@/lib/stores/user-preferences";
+import {
+  ANON_STORAGE_KEY,
+  ensureAnonymousId,
+  setStoredCredits,
+} from "@/lib/credits";
 
 type SpeechRecognitionResultLike = {
   transcript?: string;
@@ -1164,18 +1169,12 @@ const Composer = ({
           )}
         </div>
 
-        <div
-          className={`relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--accent)] text-white transition ${canVoice ? "hover:bg-[var(--accent-soft)]" : "opacity-50"}`}
-        >
+        <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={handleMicClick}
             aria-pressed={isListening}
-            className={`absolute inset-0 flex items-center justify-center transition ${
-              isListening
-                ? ""
-                : "group-data-[empty=false]/composer:scale-0 group-data-[empty=false]/composer:opacity-0"
-            }`}
+            className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--accent)] text-white transition ${canVoice ? "hover:bg-[var(--accent-soft)]" : "opacity-50"}`}
             disabled={!canVoice}
           >
             {isListening ? <SquareIcon /> : <MicIcon />}
@@ -1194,15 +1193,15 @@ const Composer = ({
                 handleRemoveFile();
               }
             }}
-            className={`absolute inset-0 flex items-center justify-center transition group-data-[empty=true]/composer:scale-0 group-data-[empty=true]/composer:opacity-0 ${
-              isListening ? "pointer-events-none scale-0 opacity-0" : ""
-            }`}
+            className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--accent)] text-white transition hover:bg-[var(--accent-soft)] ${selectedFile || !isEmpty ? "" : "pointer-events-none scale-0 opacity-0"}`}
           >
             <ArrowUpIcon />
           </button>
-          <ComposerPrimitive.Cancel className="absolute inset-0 flex items-center justify-center transition group-data-[running=false]/composer:scale-0 group-data-[running=false]/composer:opacity-0">
-            <SquareIcon />
-          </ComposerPrimitive.Cancel>
+          {isRunning ? (
+            <ComposerPrimitive.Cancel className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--surface)] text-white transition hover:bg-[var(--accent-soft)]">
+              <SquareIcon />
+            </ComposerPrimitive.Cancel>
+          ) : null}
         </div>
       </div>
 
@@ -1260,12 +1259,9 @@ export default function GrokThread({
   const { data: initialEntitlements } = useEntitlementsQuery();
   const [guestChatId, setGuestChatId] = useState<string | null>(() => {
     if (typeof window === "undefined") return null;
-    const existing = localStorage.getItem("fixly_guest_chat_id");
-    if (existing) return existing;
     if (isAuthenticated) return null;
-    const created = buildGuestChatId();
-    localStorage.setItem("fixly_guest_chat_id", created);
-    return created;
+    const anonId = ensureAnonymousId();
+    return anonId ?? null;
   });
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const {
@@ -1429,8 +1425,12 @@ export default function GrokThread({
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (!guestChatId || isAuthenticated) return;
-    if (localStorage.getItem("fixly_guest_chat_id") === guestChatId) return;
-    localStorage.setItem("fixly_guest_chat_id", guestChatId);
+    if (localStorage.getItem("fixly_guest_chat_id") !== guestChatId) {
+      localStorage.setItem("fixly_guest_chat_id", guestChatId);
+    }
+    if (localStorage.getItem(ANON_STORAGE_KEY) !== guestChatId) {
+      localStorage.setItem(ANON_STORAGE_KEY, guestChatId);
+    }
   }, [guestChatId, isAuthenticated]);
 
   useEffect(() => {
@@ -1471,12 +1471,13 @@ export default function GrokThread({
   }, [entitlements, entitlementsSource]);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
     if (typeof entitlements.credits !== "number") return;
-    localStorage.setItem("fixly_credits", String(entitlements.credits));
+    const normalized = Math.max(0, Math.floor(entitlements.credits));
+    setStoredCredits(normalized);
+    if (typeof window === "undefined") return;
     window.dispatchEvent(
       new CustomEvent("fixly-credits-update", {
-        detail: { credits: entitlements.credits },
+        detail: { credits: normalized },
       }),
     );
   }, [entitlements.credits]);
@@ -2215,6 +2216,9 @@ const ChatHistorySidebar = ({
   const [searchQuery, setSearchQuery] = useState("");
   const [editingThreadId, setEditingThreadId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
+  const [mobileMenuThreadId, setMobileMenuThreadId] = useState<string | null>(
+    null,
+  );
 
   const filteredThreads = useMemo(() => {
     if (!threads) return [];
@@ -2363,6 +2367,63 @@ const ChatHistorySidebar = ({
                     </button>
                   </div>
                 )}
+                {editingThreadId !== thread.id ? (
+                  <div className="ml-auto flex items-center lg:hidden">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setMobileMenuThreadId(
+                          mobileMenuThreadId === thread.id ? null : thread.id,
+                        );
+                      }}
+                      className="rounded p-2 text-[var(--muted)] transition hover:bg-white/10 hover:text-white"
+                      aria-label="More actions"
+                    >
+                      <svg
+                        viewBox="0 0 24 24"
+                        fill="currentColor"
+                        className="h-4 w-4"
+                      >
+                        <circle cx="5" cy="12" r="1.5" />
+                        <circle cx="12" cy="12" r="1.5" />
+                        <circle cx="19" cy="12" r="1.5" />
+                      </svg>
+                    </button>
+                    {mobileMenuThreadId === thread.id ? (
+                      <div className="absolute top-10 right-2 z-50 w-32 rounded-md border border-white/10 bg-[var(--bg-elev)] p-1 shadow-lg">
+                        <button
+                          type="button"
+                          className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs text-white transition hover:bg-white/10"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setMobileMenuThreadId(null);
+                            setEditingThreadId(thread.id);
+                            setEditTitle(thread.title);
+                          }}
+                        >
+                          Rename
+                        </button>
+                        <button
+                          type="button"
+                          className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs text-red-300 transition hover:bg-red-500/20"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setMobileMenuThreadId(null);
+                            if (confirm("Delete this chat?")) {
+                              onDeleteThread(thread.id);
+                              if (activeThreadId === thread.id) {
+                                onSelectThread(thread.id);
+                              }
+                            }
+                          }}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
               </div>
             ))
           ) : (

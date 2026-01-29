@@ -2,13 +2,20 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuthActions } from "@convex-dev/auth/react";
 import { useConvexAuth } from "convex/react";
 
 import { Button } from "@/components/ui/button";
 import Container from "./Container";
 import { useUser } from "@/lib/useUser";
+import {
+  CREDIT_STORAGE_KEY,
+  ensureAnonymousId,
+  ensureInitialCredits,
+  getStoredCredits,
+  setStoredCredits,
+} from "@/lib/credits";
 
 export default function Navbar() {
   const router = useRouter();
@@ -19,10 +26,19 @@ export default function Navbar() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [credits, setCredits] = useState<number | null>(() => {
     if (typeof window === "undefined") return null;
-    const cached = localStorage.getItem("fixly_credits");
-    return cached && Number.isFinite(Number(cached)) ? Number(cached) : null;
+    const existing = getStoredCredits();
+    if (existing !== null) return existing;
+    const initial = ensureInitialCredits();
+    return typeof initial === "number" ? initial : null;
   });
+  const isHydrated = typeof window !== "undefined";
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const updateCredits = useCallback((value: number | null | undefined) => {
+    if (typeof value !== "number" || !Number.isFinite(value)) return;
+    const normalized = Math.max(0, Math.floor(value));
+    setCredits(normalized);
+    setStoredCredits(normalized);
+  }, []);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -45,33 +61,63 @@ export default function Navbar() {
   }, []);
 
   useEffect(() => {
-    if (!isAuthenticated) return;
+    if (typeof window === "undefined") return;
+    ensureAnonymousId();
+  }, []);
+
+  useEffect(() => {
+    if (!isHydrated) return;
     const handleCreditsUpdate = (event: Event) => {
       const detail = (event as CustomEvent<{ credits?: number }>).detail;
       if (typeof detail?.credits === "number") {
-        setCredits(detail.credits);
+        updateCredits(detail.credits);
       }
     };
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key && event.key !== CREDIT_STORAGE_KEY) return;
+      const next = getStoredCredits();
+      if (next !== null) {
+        setCredits(next);
+      }
+    };
+    window.addEventListener("fixly-credits-update", handleCreditsUpdate);
+    window.addEventListener("storage", handleStorage);
+    return () => {
+      window.removeEventListener("fixly-credits-update", handleCreditsUpdate);
+      window.removeEventListener("storage", handleStorage);
+    };
+  }, [isHydrated, updateCredits]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
     const refreshCredits = () => {
       fetch("/api/ai")
         .then((res) => res.json())
         .then((data) => {
           if (typeof data?.entitlements?.credits === "number") {
-            setCredits(data.entitlements.credits);
+            updateCredits(data.entitlements.credits);
+            return;
+          }
+          const stored = getStoredCredits();
+          if (stored !== null) {
+            setCredits(stored);
+            return;
+          }
+          const initial = ensureInitialCredits();
+          if (typeof initial === "number") {
+            updateCredits(initial);
           }
         })
         .catch(() => {});
     };
     refreshCredits();
     window.addEventListener("focus", refreshCredits);
-    window.addEventListener("fixly-credits-update", handleCreditsUpdate);
     const interval = window.setInterval(refreshCredits, 60000);
     return () => {
       window.removeEventListener("focus", refreshCredits);
-      window.removeEventListener("fixly-credits-update", handleCreditsUpdate);
       window.clearInterval(interval);
     };
-  }, [isAuthenticated]);
+  }, [isAuthenticated, updateCredits]);
 
   return (
     <header className="sticky top-0 z-40 border-b border-[var(--border)] bg-[color:var(--bg)]/90 backdrop-blur">
@@ -101,6 +147,11 @@ export default function Navbar() {
             </Link>
           </nav>
           <div className="flex items-center gap-3 text-sm">
+            {isHydrated && typeof credits === "number" ? (
+              <span className="inline-flex items-center rounded-full border border-[var(--accent)]/30 bg-[var(--accent)]/10 px-2.5 py-1 text-[10px] font-semibold tracking-[0.18em] text-[var(--accent)] uppercase">
+                Credits: {credits}
+              </span>
+            ) : null}
             {!isLoading && isAuthenticated ? (
               <>
                 <div
@@ -121,13 +172,8 @@ export default function Navbar() {
                     </span>
                     <span className="text-xs">▾</span>
                   </button>
-                  {typeof credits === "number" ? (
-                    <span className="ml-2 inline-flex items-center rounded-full border border-[var(--accent)]/30 bg-[var(--accent)]/10 px-2.5 py-1 text-[10px] font-semibold tracking-[0.2em] text-[var(--accent)] uppercase">
-                      {credits} credits
-                    </span>
-                  ) : null}
                   {isMenuOpen ? (
-                    <div className="absolute top-full right-0 z-50 w-64 origin-top-right pt-2 focus:outline-none">
+                    <div className="absolute top-full right-4 left-4 z-50 w-auto origin-top pt-2 focus:outline-none md:right-0 md:left-auto md:w-64 md:origin-top-right">
                       <div className="rounded-xl border border-white/10 bg-[var(--bg-elev)] p-1 shadow-xl backdrop-blur-xl">
                         <Link
                           href="/profile"

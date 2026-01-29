@@ -81,6 +81,7 @@ import {
   useEntitlementsQuery,
 } from "@/lib/queries/entitlements";
 import { useUserPreferencesStore } from "@/lib/stores/user-preferences";
+import { setStoredCredits } from "@/lib/credits";
 import { env } from "@/env";
 import { cn } from "@/lib/utils";
 
@@ -1554,19 +1555,18 @@ const Composer = ({
               </button>
             )}
 
-            <div className="relative h-10 w-10">
-              {/* MIC BUTTON */}
+            <div className="flex items-center gap-2">
               <button
                 type="button"
                 onClick={handleMicClick}
                 className={cn(
-                  "absolute inset-0 flex items-center justify-center rounded-xl text-white shadow-lg transition-all active:scale-95",
+                  "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-white shadow-lg transition-all active:scale-95",
                   isListening
-                    ? "scale-105 bg-red-500"
+                    ? "bg-red-500"
                     : "bg-gradient-to-br from-[var(--accent)] to-[var(--accent-soft)] hover:scale-105 hover:brightness-110",
-                  !canVoice && "hidden",
-                  !isEmpty && !isListening && "scale-0 opacity-0",
+                  !canVoice && "opacity-50",
                 )}
+                disabled={!canVoice}
               >
                 {isListening ? (
                   <SquareIcon className="h-4 w-4" />
@@ -1575,7 +1575,6 @@ const Composer = ({
                 )}
               </button>
 
-              {/* SEND BUTTON */}
               <button
                 type="button"
                 onClick={async () => {
@@ -1589,13 +1588,12 @@ const Composer = ({
                   }
                 }}
                 className={cn(
-                  "absolute inset-0 flex items-center justify-center rounded-xl bg-gradient-to-br from-[var(--accent)] to-[var(--accent-soft)] text-white shadow-lg transition-all active:scale-95",
-                  isEmpty
-                    ? "scale-0 opacity-0"
+                  "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[var(--accent)] to-[var(--accent-soft)] text-white shadow-lg transition-all active:scale-95",
+                  selectedFiles.length === 0 && isEmpty
+                    ? "pointer-events-none scale-75 opacity-0"
                     : "hover:scale-105 hover:brightness-110",
-                  isListening && "pointer-events-none scale-0 opacity-0",
                 )}
-                disabled={isEmpty || isListening}
+                disabled={selectedFiles.length === 0 && isEmpty}
               >
                 <ArrowUpIcon className="h-5 w-5" />
               </button>
@@ -1929,7 +1927,7 @@ export default function GrokThread({
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (typeof entitlements.credits !== "number") return;
-    localStorage.setItem("fixly_credits", String(entitlements.credits));
+    setStoredCredits(entitlements.credits);
     window.dispatchEvent(
       new CustomEvent("fixly-credits-update", {
         detail: { credits: entitlements.credits },

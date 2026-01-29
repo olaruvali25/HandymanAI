@@ -108,13 +108,13 @@ export const getCreditsForActor = query({
     }
     const anonymousId = args.anonymousId;
     if (!anonymousId) {
-      return { credits: 0 };
+      return { credits: DEFAULT_ANON_CREDITS };
     }
     const anonymousUser = await ctx.db
       .query("anonymousUsers")
       .withIndex("by_anonymousId", (q) => q.eq("anonymousId", anonymousId))
       .unique();
-    return { credits: anonymousUser?.credits ?? 0 };
+    return { credits: anonymousUser?.credits ?? DEFAULT_ANON_CREDITS };
   },
 });
 

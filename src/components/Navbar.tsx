@@ -11,6 +11,13 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import Container from "./Container";
 import { useUser } from "@/lib/useUser";
+import {
+  CREDIT_STORAGE_KEY,
+  ensureAnonymousId,
+  ensureInitialCredits,
+  getStoredCredits,
+  setStoredCredits,
+} from "@/lib/credits";
 
 export default function Navbar() {
   const router = useRouter();
@@ -21,9 +28,10 @@ export default function Navbar() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [credits, setCredits] = useState<number | null>(() => {
     if (typeof window === "undefined") return null;
-    const cached = localStorage.getItem("fixly_credits");
-    return cached && Number.isFinite(Number(cached)) ? Number(cached) : null;
+    const existing = ensureInitialCredits();
+    return typeof existing === "number" ? existing : null;
   });
+  const [isHydrated, setIsHydrated] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const headerRef = useRef<HTMLElement | null>(null);
 
@@ -69,30 +77,53 @@ export default function Navbar() {
   }, []);
 
   useEffect(() => {
-    if (!isAuthenticated) return;
+    if (typeof window === "undefined") return;
+    ensureAnonymousId();
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setIsHydrated(true);
+  }, []);
+
+  useEffect(() => {
     const handleCreditsUpdate = (event: Event) => {
       const detail = (event as CustomEvent<{ credits?: number }>).detail;
       if (typeof detail?.credits === "number") {
         setCredits(detail.credits);
+        setStoredCredits(detail.credits);
       }
     };
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key && event.key !== CREDIT_STORAGE_KEY) return;
+      const next = getStoredCredits();
+      if (next !== null) {
+        setCredits(next);
+      }
+    };
+    window.addEventListener("fixly-credits-update", handleCreditsUpdate);
+    window.addEventListener("storage", handleStorage);
+    return () => {
+      window.removeEventListener("fixly-credits-update", handleCreditsUpdate);
+      window.removeEventListener("storage", handleStorage);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
     const refreshCredits = () => {
       fetch("/api/ai")
         .then((res) => res.json())
         .then((data) => {
           if (typeof data?.entitlements?.credits === "number") {
             setCredits(data.entitlements.credits);
+            setStoredCredits(data.entitlements.credits);
           }
         })
         .catch(() => {});
     };
     refreshCredits();
     window.addEventListener("focus", refreshCredits);
-    window.addEventListener("fixly-credits-update", handleCreditsUpdate);
     const interval = window.setInterval(refreshCredits, 60000);
     return () => {
       window.removeEventListener("focus", refreshCredits);
-      window.removeEventListener("fixly-credits-update", handleCreditsUpdate);
       window.clearInterval(interval);
     };
   }, [isAuthenticated]);
@@ -128,6 +159,11 @@ export default function Navbar() {
             </Link>
           </nav>
           <div className="flex items-center gap-3 text-sm">
+            {isHydrated && typeof credits === "number" ? (
+              <span className="inline-flex items-center rounded-full border border-[var(--accent)]/30 bg-[var(--accent)]/10 px-2.5 py-1 text-[10px] font-semibold tracking-[0.2em] text-[var(--accent)] uppercase">
+                Credits: {credits}
+              </span>
+            ) : null}
             {isLoading ? (
               <div className="flex items-center gap-3">
                 <Spinner className="text-[var(--accent)]" />
@@ -160,7 +196,7 @@ export default function Navbar() {
                     </span>
                   ) : null}
                   {isMenuOpen ? (
-                    <div className="absolute top-full right-0 z-50 w-64 origin-top-right pt-2 focus:outline-none">
+                    <div className="absolute top-full right-4 left-4 z-50 w-auto origin-top pt-2 focus:outline-none md:right-0 md:left-auto md:w-64 md:origin-top-right">
                       <div className="rounded-xl border border-white/10 bg-[var(--bg-elev)] p-1 shadow-xl backdrop-blur-xl">
                         <Link
                           href="/profile"

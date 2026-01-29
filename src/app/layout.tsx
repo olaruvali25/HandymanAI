@@ -3,8 +3,6 @@ import { IBM_Plex_Sans, Sora } from "next/font/google";
 import { ConvexAuthNextjsServerProvider } from "@convex-dev/auth/nextjs/server";
 import ConvexClientProvider from "@/components/convex-client-provider";
 import Navbar from "@/components/Navbar";
-import Footer from "@/components/Footer";
-
 import "./globals.css";
 
 const plexSans = IBM_Plex_Sans({

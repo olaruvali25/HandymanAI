@@ -14,7 +14,6 @@ import { useUser } from "@/lib/useUser";
 import {
   CREDIT_STORAGE_KEY,
   ensureAnonymousId,
-  ensureInitialCredits,
   getStoredCredits,
   setStoredCredits,
 } from "@/lib/credits";
@@ -26,12 +25,9 @@ export default function Navbar() {
   const { user } = useUser();
   const displayName = user?.name || user?.email || "Account";
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [credits, setCredits] = useState<number | null>(() => {
-    if (typeof window === "undefined") return null;
-    const existing = ensureInitialCredits();
-    return typeof existing === "number" ? existing : null;
-  });
+  const [credits, setCredits] = useState<number | null>(null);
   const [isHydrated, setIsHydrated] = useState(false);
+  const skipGuestCreditsRef = useRef(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const headerRef = useRef<HTMLElement | null>(null);
 
@@ -77,11 +73,33 @@ export default function Navbar() {
   }, []);
 
   useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect */
     if (typeof window === "undefined") return;
     ensureAnonymousId();
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsHydrated(true);
+    /* eslint-enable react-hooks/set-state-in-effect */
   }, []);
+
+  useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect */
+    if (!isHydrated) return;
+    if (isAuthenticated) {
+      setCredits(null);
+      return;
+    }
+    if (skipGuestCreditsRef.current) {
+      setCredits(null);
+      return;
+    }
+    const stored = getStoredCredits();
+    if (stored !== null) {
+      setCredits(stored);
+      return;
+    }
+    setCredits(20);
+    setStoredCredits(20);
+    /* eslint-enable react-hooks/set-state-in-effect */
+  }, [isAuthenticated, isHydrated]);
 
   useEffect(() => {
     const handleCreditsUpdate = (event: Event) => {
@@ -159,7 +177,7 @@ export default function Navbar() {
             </Link>
           </nav>
           <div className="flex items-center gap-3 text-sm">
-            {isHydrated && typeof credits === "number" ? (
+            {!isAuthenticated && isHydrated && typeof credits === "number" ? (
               <span className="inline-flex items-center rounded-full border border-[var(--accent)]/30 bg-[var(--accent)]/10 px-2.5 py-1 text-[10px] font-semibold tracking-[0.2em] text-[var(--accent)] uppercase">
                 Credits: {credits}
               </span>
@@ -190,13 +208,8 @@ export default function Navbar() {
                     </span>
                     <span className="text-xs">▾</span>
                   </button>
-                  {typeof credits === "number" ? (
-                    <span className="ml-2 inline-flex items-center rounded-full border border-[var(--accent)]/30 bg-[var(--accent)]/10 px-2.5 py-1 text-[10px] font-semibold tracking-[0.2em] text-[var(--accent)] uppercase">
-                      {credits} credits
-                    </span>
-                  ) : null}
                   {isMenuOpen ? (
-                    <div className="absolute top-full right-4 left-4 z-50 w-auto origin-top pt-2 focus:outline-none md:right-0 md:left-auto md:w-64 md:origin-top-right">
+                    <div className="absolute top-full right-2 left-2 z-50 mx-auto w-[calc(100vw-1rem)] max-w-[420px] origin-top pt-2 focus:outline-none md:right-0 md:left-auto md:mx-0 md:w-64 md:max-w-none md:origin-top-right">
                       <div className="rounded-xl border border-white/10 bg-[var(--bg-elev)] p-1 shadow-xl backdrop-blur-xl">
                         <Link
                           href="/profile"
@@ -210,6 +223,11 @@ export default function Navbar() {
                             {user?.email}
                           </p>
                         </Link>
+                        {typeof credits === "number" ? (
+                          <div className="mx-3 mt-1 mb-2 inline-flex items-center rounded-full border border-[var(--accent)]/30 bg-[var(--accent)]/10 px-2.5 py-1 text-[10px] font-semibold tracking-[0.2em] text-[var(--accent)] uppercase">
+                            {credits} credits
+                          </div>
+                        ) : null}
                         <div className="my-1 h-px bg-white/10" />
                         <Link
                           href="/tasks"
@@ -243,6 +261,11 @@ export default function Navbar() {
                   size="sm"
                   className="border-[var(--border)] bg-[var(--bg-elev)] text-[var(--text)] hover:bg-[var(--surface)] hover:text-[var(--text)]"
                   onClick={async () => {
+                    setCredits(null);
+                    skipGuestCreditsRef.current = true;
+                    if (typeof window !== "undefined") {
+                      localStorage.removeItem(CREDIT_STORAGE_KEY);
+                    }
                     await signOut();
                     router.push("/");
                   }}

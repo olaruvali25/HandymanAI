@@ -98,15 +98,23 @@ export async function GET(
     searchParams.get("redirectTo")?.startsWith("/")
       ? searchParams.get("redirectTo")!
       : "/";
+  const code = searchParams.get("code");
 
   const host = request.headers.get("host");
   const names = getCookieNames(host);
 
   try {
-    const result = await fetchAction(api.auth.signIn, {
+    const args: Record<string, unknown> = {
       provider: params.provider,
-      redirectTo,
-    } as Record<string, unknown>);
+    };
+    if (redirectTo) {
+      args.redirectTo = redirectTo;
+    }
+    if (code) {
+      args.params = { code };
+    }
+
+    const result = await fetchAction(api.auth.signIn, args);
 
     if (result?.redirect) {
       const location = normalizeRedirect(result.redirect, request);
@@ -115,6 +123,27 @@ export async function GET(
         headers: { ...JSON_HEADERS },
       });
       setCookie(response, names.verifier, result.verifier ?? null, host);
+      return response;
+    }
+
+    if (result?.tokens !== undefined) {
+      const response = NextResponse.redirect(redirectTo, {
+        status: 302,
+        headers: { ...JSON_HEADERS },
+      });
+      if (result.tokens === null) {
+        setCookie(response, names.token, null, host);
+        setCookie(response, names.refreshToken, null, host);
+      } else {
+        setCookie(response, names.token, result.tokens.token, host);
+        setCookie(
+          response,
+          names.refreshToken,
+          result.tokens.refreshToken,
+          host,
+        );
+      }
+      setCookie(response, names.verifier, null, host);
       return response;
     }
 

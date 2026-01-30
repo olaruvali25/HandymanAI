@@ -17,66 +17,6 @@ function json(body: unknown, status = 200) {
   });
 }
 
-const CANONICAL_HOST = "fixlyapp.dev";
-
-const isLocalHostName = (host: string | null) =>
-  !!host && /(localhost|127\.0\.0\.1)/i.test(host);
-
-const isVercelHost = (host: string | null) =>
-  !!host && /\.vercel\.app$/i.test(host);
-
-function getCanonicalOrigin(request: Request) {
-  if (process.env.NODE_ENV !== "production") {
-    return null;
-  }
-  const proto =
-    request.headers.get("x-forwarded-proto") ??
-    request.headers.get("protocol") ??
-    "https";
-  const forwardedHost =
-    request.headers.get("x-forwarded-host") ?? request.headers.get("host");
-  const host =
-    isLocalHostName(forwardedHost) || isVercelHost(forwardedHost)
-      ? CANONICAL_HOST
-      : forwardedHost!;
-  const normalizedProto = proto === "http" ? "https" : proto;
-  return `${normalizedProto}://${host}`;
-}
-
-function normalizeRedirect(redirect: string, request: Request) {
-  if (process.env.NODE_ENV !== "production") return redirect;
-  try {
-    const canonicalOrigin = getCanonicalOrigin(request);
-    const url = new URL(redirect);
-
-    if (canonicalOrigin) {
-      const canonical = new URL(canonicalOrigin);
-      if (isLocalHostName(url.hostname) || isVercelHost(url.hostname)) {
-        url.protocol = canonical.protocol;
-        url.hostname = canonical.hostname;
-        url.port = "";
-      }
-    }
-
-    const redirectUri = url.searchParams.get("redirect_uri");
-    if (redirectUri) {
-      const nested = new URL(redirectUri);
-      if (canonicalOrigin) {
-        const canonical = new URL(canonicalOrigin);
-        if (isLocalHostName(nested.hostname) || isVercelHost(nested.hostname)) {
-          nested.protocol = canonical.protocol;
-          nested.hostname = canonical.hostname;
-          nested.port = "";
-        }
-      }
-      url.searchParams.set("redirect_uri", nested.toString());
-    }
-    return url.toString();
-  } catch {
-    return redirect;
-  }
-}
-
 function isLocalHost(host: string | null) {
   return /(localhost|127\.0\.0\.1):\d+/.test(host ?? "");
 }
@@ -189,7 +129,7 @@ export async function POST(request: Request) {
 
       if (result?.redirect) {
         const response = json({
-          redirect: normalizeRedirect(result.redirect, request),
+          redirect: result.redirect,
           verifier: result.verifier,
         });
         setCookie(response, names.verifier, result.verifier ?? null, host);

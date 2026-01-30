@@ -19,22 +19,54 @@ function json(body: unknown, status = 200) {
 
 const CANONICAL_HOST = "fixlyapp.dev";
 
-function normalizeRedirect(redirect: string) {
+const isBadHost = (host: string | null) =>
+  !host ||
+  /(localhost|127\.0\.0\.1)/i.test(host) ||
+  /\.vercel\.app$/i.test(host) ||
+  host !== CANONICAL_HOST;
+
+function getCanonicalOrigin(request: Request) {
+  if (process.env.NODE_ENV !== "production") {
+    return null;
+  }
+  const proto =
+    request.headers.get("x-forwarded-proto") ??
+    request.headers.get("protocol") ??
+    "https";
+  const forwardedHost =
+    request.headers.get("x-forwarded-host") ?? request.headers.get("host");
+  const host = isBadHost(forwardedHost) ? CANONICAL_HOST : forwardedHost!;
+  const normalizedProto = proto === "http" ? "https" : proto;
+  return `${normalizedProto}://${host}`;
+}
+
+function normalizeRedirect(redirect: string, request: Request) {
   if (process.env.NODE_ENV !== "production") return redirect;
   try {
+    const canonicalOrigin = getCanonicalOrigin(request);
     const url = new URL(redirect);
+
+    if (canonicalOrigin) {
+      const canonical = new URL(canonicalOrigin);
+      if (isBadHost(url.hostname)) {
+        url.protocol = canonical.protocol;
+        url.hostname = canonical.hostname;
+        url.port = "";
+      }
+    }
+
     const redirectUri = url.searchParams.get("redirect_uri");
     if (redirectUri) {
       const nested = new URL(redirectUri);
-      const badHost =
-        /(localhost|127\.0\.0\.1)/i.test(nested.hostname) ||
-        /\.vercel\.app$/i.test(nested.hostname);
-      if (badHost || nested.hostname !== CANONICAL_HOST) {
-        nested.protocol = "https:";
-        nested.hostname = CANONICAL_HOST;
-        nested.port = "";
-        url.searchParams.set("redirect_uri", nested.toString());
+      if (canonicalOrigin) {
+        const canonical = new URL(canonicalOrigin);
+        if (isBadHost(nested.hostname)) {
+          nested.protocol = canonical.protocol;
+          nested.hostname = canonical.hostname;
+          nested.port = "";
+        }
       }
+      url.searchParams.set("redirect_uri", nested.toString());
     }
     return url.toString();
   } catch {
@@ -154,7 +186,7 @@ export async function POST(request: Request) {
 
       if (result?.redirect) {
         const response = json({
-          redirect: normalizeRedirect(result.redirect),
+          redirect: normalizeRedirect(result.redirect, request),
           verifier: result.verifier,
         });
         setCookie(response, names.verifier, result.verifier ?? null, host);

@@ -1,8 +1,12 @@
 import type { AuthConfig } from "convex/server";
 
-const PRODUCTION_DOMAIN = "https://fixlyapp-two.vercel.app";
+const PRODUCTION_DOMAIN = "https://fixlyapp.dev";
 
 const getDomain = () => {
+  if (process.env.NODE_ENV === "production") {
+    return PRODUCTION_DOMAIN;
+  }
+
   let domain = process.env.CONVEX_SITE_URL;
 
   let isLocalhost = false;

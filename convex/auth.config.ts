@@ -1,7 +1,15 @@
 import type { AuthConfig } from "convex/server";
 
 const getDomain = () => {
-  const domain = process.env.CONVEX_SITE_URL;
+  let domain = process.env.CONVEX_SITE_URL;
+  if (domain && /localhost/i.test(domain)) {
+    const vercelHost = process.env.VERCEL_URL;
+    if (vercelHost) {
+      domain = vercelHost.startsWith("http")
+        ? vercelHost
+        : `https://${vercelHost}`;
+    }
+  }
   if (!domain) {
     if (process.env.NODE_ENV !== "production") {
       console.warn(

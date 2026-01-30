@@ -17,6 +17,31 @@ function json(body: unknown, status = 200) {
   });
 }
 
+const CANONICAL_HOST = "fixlyapp.dev";
+
+function normalizeRedirect(redirect: string) {
+  if (process.env.NODE_ENV !== "production") return redirect;
+  try {
+    const url = new URL(redirect);
+    const redirectUri = url.searchParams.get("redirect_uri");
+    if (redirectUri) {
+      const nested = new URL(redirectUri);
+      const badHost =
+        /(localhost|127\.0\.0\.1)/i.test(nested.hostname) ||
+        /\.vercel\.app$/i.test(nested.hostname);
+      if (badHost || nested.hostname !== CANONICAL_HOST) {
+        nested.protocol = "https:";
+        nested.hostname = CANONICAL_HOST;
+        nested.port = "";
+        url.searchParams.set("redirect_uri", nested.toString());
+      }
+    }
+    return url.toString();
+  } catch {
+    return redirect;
+  }
+}
+
 function isLocalHost(host: string | null) {
   return /(localhost|127\.0\.0\.1):\d+/.test(host ?? "");
 }
@@ -129,7 +154,7 @@ export async function POST(request: Request) {
 
       if (result?.redirect) {
         const response = json({
-          redirect: result.redirect,
+          redirect: normalizeRedirect(result.redirect),
           verifier: result.verifier,
         });
         setCookie(response, names.verifier, result.verifier ?? null, host);

@@ -19,11 +19,11 @@ function json(body: unknown, status = 200) {
 
 const CANONICAL_HOST = "fixlyapp.dev";
 
-const isBadHost = (host: string | null) =>
-  !host ||
-  /(localhost|127\.0\.0\.1)/i.test(host) ||
-  /\.vercel\.app$/i.test(host) ||
-  host !== CANONICAL_HOST;
+const isLocalHostName = (host: string | null) =>
+  !!host && /(localhost|127\.0\.0\.1)/i.test(host);
+
+const isVercelHost = (host: string | null) =>
+  !!host && /\.vercel\.app$/i.test(host);
 
 function getCanonicalOrigin(request: Request) {
   if (process.env.NODE_ENV !== "production") {
@@ -35,7 +35,10 @@ function getCanonicalOrigin(request: Request) {
     "https";
   const forwardedHost =
     request.headers.get("x-forwarded-host") ?? request.headers.get("host");
-  const host = isBadHost(forwardedHost) ? CANONICAL_HOST : forwardedHost!;
+  const host =
+    isLocalHostName(forwardedHost) || isVercelHost(forwardedHost)
+      ? CANONICAL_HOST
+      : forwardedHost!;
   const normalizedProto = proto === "http" ? "https" : proto;
   return `${normalizedProto}://${host}`;
 }
@@ -48,7 +51,7 @@ function normalizeRedirect(redirect: string, request: Request) {
 
     if (canonicalOrigin) {
       const canonical = new URL(canonicalOrigin);
-      if (isBadHost(url.hostname)) {
+      if (isLocalHostName(url.hostname) || isVercelHost(url.hostname)) {
         url.protocol = canonical.protocol;
         url.hostname = canonical.hostname;
         url.port = "";
@@ -60,7 +63,7 @@ function normalizeRedirect(redirect: string, request: Request) {
       const nested = new URL(redirectUri);
       if (canonicalOrigin) {
         const canonical = new URL(canonicalOrigin);
-        if (isBadHost(nested.hostname)) {
+        if (isLocalHostName(nested.hostname) || isVercelHost(nested.hostname)) {
           nested.protocol = canonical.protocol;
           nested.hostname = canonical.hostname;
           nested.port = "";

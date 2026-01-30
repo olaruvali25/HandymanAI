@@ -2929,6 +2929,9 @@ const ChatHistorySidebar = ({
   const [searchQuery, setSearchQuery] = useState("");
   const [editingThreadId, setEditingThreadId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
+  const [mobileMenuThreadId, setMobileMenuThreadId] = useState<string | null>(
+    null,
+  );
   const { state } = useSidebar();
   const isCollapsed = state === "collapsed";
   const isSidebarLoading =
@@ -3088,48 +3091,103 @@ const ChatHistorySidebar = ({
                       )}
 
                       {editingThreadId !== thread.id && (
-                        <div className="absolute top-1/2 right-1 flex -translate-y-1/2 items-center gap-1 opacity-0 transition group-hover/menu-item:opacity-100">
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleStartEdit(thread);
-                            }}
-                            className="text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground rounded p-1"
-                            title="Rename"
-                          >
-                            <svg
-                              viewBox="0 0 24 24"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth="2"
-                              className="h-3 w-3"
+                        <>
+                          <div className="absolute top-1/2 right-1 hidden -translate-y-1/2 items-center gap-1 opacity-0 transition group-hover/menu-item:opacity-100 md:flex">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleStartEdit(thread);
+                              }}
+                              className="text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground rounded p-1"
+                              title="Rename"
                             >
-                              <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" />
-                            </svg>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              if (confirm("Delete this chat?")) {
-                                onDeleteThread(thread.id);
-                              }
-                            }}
-                            className="text-sidebar-foreground/70 rounded p-1 hover:bg-red-500/20 hover:text-red-400"
-                            title="Delete"
-                          >
-                            <svg
-                              viewBox="0 0 24 24"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth="2"
-                              className="h-3 w-3"
+                              <svg
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2"
+                                className="h-3 w-3"
+                              >
+                                <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" />
+                              </svg>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (confirm("Delete this chat?")) {
+                                  onDeleteThread(thread.id);
+                                }
+                              }}
+                              className="text-sidebar-foreground/70 rounded p-1 hover:bg-red-500/20 hover:text-red-400"
+                              title="Delete"
                             >
-                              <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                            </svg>
-                          </button>
-                        </div>
+                              <svg
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2"
+                                className="h-3 w-3"
+                              >
+                                <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                              </svg>
+                            </button>
+                          </div>
+                          <div className="absolute top-1 right-1 md:hidden">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setMobileMenuThreadId(
+                                  mobileMenuThreadId === thread.id
+                                    ? null
+                                    : thread.id,
+                                );
+                              }}
+                              className="text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground rounded p-1"
+                              aria-label="More actions"
+                            >
+                              <svg
+                                viewBox="0 0 24 24"
+                                fill="currentColor"
+                                className="h-4 w-4"
+                              >
+                                <circle cx="5" cy="12" r="1.5" />
+                                <circle cx="12" cy="12" r="1.5" />
+                                <circle cx="19" cy="12" r="1.5" />
+                              </svg>
+                            </button>
+                            {mobileMenuThreadId === thread.id ? (
+                              <div className="border-sidebar-border/60 bg-sidebar absolute right-0 z-20 mt-1 w-32 rounded-md border p-1 shadow-xl">
+                                <button
+                                  type="button"
+                                  className="text-sidebar-foreground hover:bg-sidebar-accent flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs transition"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setMobileMenuThreadId(null);
+                                    handleStartEdit(thread);
+                                  }}
+                                >
+                                  Rename
+                                </button>
+                                <button
+                                  type="button"
+                                  className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs text-red-300 transition hover:bg-red-500/20"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setMobileMenuThreadId(null);
+                                    if (confirm("Delete this chat?")) {
+                                      onDeleteThread(thread.id);
+                                    }
+                                  }}
+                                >
+                                  Delete
+                                </button>
+                              </div>
+                            ) : null}
+                          </div>
+                        </>
                       )}
                     </SidebarMenuItem>
                   ))

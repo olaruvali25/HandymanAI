@@ -11,7 +11,8 @@
 From `convex/schema.ts`:
 
 - `users` — app users + plan/credits + future billing fields (Stripe IDs, etc.)
-- `anonymousUsers` — guest identities + credits, later merged into a user
+- `guestCredits` — guest credit balances (cookie-backed guest id)
+- `anonymousUsers` — legacy guest identities (pre-cookie migration)
 - `tasks` — demo CRUD feature (protected route)
 - `chatThreads` / `chatMessages` — chat history persistence for users and guests
 - `creditCharges` / `creditGrants` — legacy usage + grant tables (still retained)
@@ -57,9 +58,9 @@ For an authoritative list of tables + field types + indexes, see:
 
 ## “Guest” vs “User” identity (important)
 
-The frontend uses a cookie-based anonymous id (`fixly_anon`) to track guest usage.
+The frontend uses a cookie-based guest id (`fixly_guest_id`) to track guest usage.
 
-- Guest credits live in `anonymousUsers`
+- Guest credits live in `guestCredits`
 - On signup/login, the app merges guest threads + credits into the user
 
 This is implemented across:

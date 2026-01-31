@@ -64,6 +64,20 @@ Indexes:
 
 - `by_anonymousId`: (`anonymousId`)
 
+## guestCredits
+
+Fields:
+
+- `guestId`: string
+- `remaining`: number
+- `createdAt`: number
+- `updatedAt`: number
+- `consumedByUserId?`: Id<"users">
+
+Indexes:
+
+- `by_guestId`: (`guestId`)
+
 ## tasks
 
 Fields:

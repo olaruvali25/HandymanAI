@@ -11,23 +11,19 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import Container from "./Container";
 import { useUser } from "@/lib/useUser";
-import {
-  CREDIT_STORAGE_KEY,
-  ensureAnonymousId,
-  getStoredCredits,
-  setStoredCredits,
-} from "@/lib/credits";
+import { useEntitlementsQuery } from "@/lib/queries/entitlements";
 
 export default function Navbar() {
   const router = useRouter();
   const { signOut } = useAuthActions();
   const { isAuthenticated, isLoading } = useConvexAuth();
   const { user } = useUser();
+  const { data: entitlements, refetch: refetchEntitlements } =
+    useEntitlementsQuery();
   const displayName = user?.name || user?.email || "Account";
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [credits, setCredits] = useState<number | null>(null);
   const [isHydrated, setIsHydrated] = useState(false);
-  const skipGuestCreditsRef = useRef(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const headerRef = useRef<HTMLElement | null>(null);
 
@@ -75,7 +71,6 @@ export default function Navbar() {
   useEffect(() => {
     /* eslint-disable react-hooks/set-state-in-effect */
     if (typeof window === "undefined") return;
-    ensureAnonymousId();
     setIsHydrated(true);
     /* eslint-enable react-hooks/set-state-in-effect */
   }, []);
@@ -83,59 +78,31 @@ export default function Navbar() {
   useEffect(() => {
     /* eslint-disable react-hooks/set-state-in-effect */
     if (!isHydrated) return;
-    if (isAuthenticated) {
-      setCredits(null);
+    if (typeof entitlements?.credits === "number") {
+      setCredits(entitlements.credits);
       return;
     }
-    if (skipGuestCreditsRef.current) {
-      setCredits(null);
-      return;
-    }
-    const stored = getStoredCredits();
-    if (stored !== null) {
-      setCredits(stored);
-      return;
-    }
-    setCredits(20);
-    setStoredCredits(20);
+    setCredits(null);
     /* eslint-enable react-hooks/set-state-in-effect */
-  }, [isAuthenticated, isHydrated]);
+  }, [entitlements, isHydrated]);
 
   useEffect(() => {
     const handleCreditsUpdate = (event: Event) => {
       const detail = (event as CustomEvent<{ credits?: number }>).detail;
       if (typeof detail?.credits === "number") {
         setCredits(detail.credits);
-        setStoredCredits(detail.credits);
-      }
-    };
-    const handleStorage = (event: StorageEvent) => {
-      if (event.key && event.key !== CREDIT_STORAGE_KEY) return;
-      const next = getStoredCredits();
-      if (next !== null) {
-        setCredits(next);
       }
     };
     window.addEventListener("fixly-credits-update", handleCreditsUpdate);
-    window.addEventListener("storage", handleStorage);
     return () => {
       window.removeEventListener("fixly-credits-update", handleCreditsUpdate);
-      window.removeEventListener("storage", handleStorage);
     };
   }, []);
 
   useEffect(() => {
-    if (!isAuthenticated) return;
+    if (!isHydrated) return;
     const refreshCredits = () => {
-      fetch("/api/ai")
-        .then((res) => res.json())
-        .then((data) => {
-          if (typeof data?.entitlements?.credits === "number") {
-            setCredits(data.entitlements.credits);
-            setStoredCredits(data.entitlements.credits);
-          }
-        })
-        .catch(() => {});
+      void refetchEntitlements();
     };
     refreshCredits();
     window.addEventListener("focus", refreshCredits);
@@ -144,7 +111,7 @@ export default function Navbar() {
       window.removeEventListener("focus", refreshCredits);
       window.clearInterval(interval);
     };
-  }, [isAuthenticated]);
+  }, [isHydrated, refetchEntitlements]);
 
   return (
     <header
@@ -262,11 +229,8 @@ export default function Navbar() {
                   className="border-[var(--border)] bg-[var(--bg-elev)] text-[var(--text)] hover:bg-[var(--surface)] hover:text-[var(--text)]"
                   onClick={async () => {
                     setCredits(null);
-                    skipGuestCreditsRef.current = true;
-                    if (typeof window !== "undefined") {
-                      localStorage.removeItem(CREDIT_STORAGE_KEY);
-                    }
                     await signOut();
+                    void refetchEntitlements();
                     router.push("/");
                   }}
                 >

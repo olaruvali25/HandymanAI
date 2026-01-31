@@ -7,13 +7,11 @@ import type { Id } from "@convex/_generated/dataModel";
 import { getOpenAIClient } from "@/lib/openai";
 import { env } from "@/env";
 import {
-  ANON_COOKIE,
   buildClientEntitlements,
-  buildCookieHeader,
   getConvexAuthToken,
-  parseCookies,
 } from "@/lib/entitlements";
-import { createHash, randomUUID } from "crypto";
+import { createHash } from "crypto";
+import { getGuestId, getOrCreateGuestId } from "@/lib/guest";
 import type { FunctionReference } from "convex/server";
 import {
   CHAT_MAX_IMAGE_ATTACHMENT_BYTES,
@@ -343,12 +341,8 @@ const getResponseOutputText = (response: unknown) => {
   return typeof part?.text === "string" ? part.text.trim() : "";
 };
 
-const getAnonymousId = (req: Request, body: AiRequestBody | null) => {
-  const cookies = parseCookies(req.headers.get("cookie"));
-  const fromBody = body?.anonymousId ?? body?.guestChatId ?? null;
-  const fromCookie = cookies[ANON_COOKIE] ?? null;
-  return { fromBody, fromCookie };
-};
+const getGuestChatId = (body: AiRequestBody | null) =>
+  body?.guestChatId ?? body?.anonymousId ?? null;
 
 const buildOutOfCreditsPayload = ({
   userHasAccount,
@@ -433,8 +427,8 @@ const withTimeout = async <T>(promise: Promise<T>, ms = CONVEX_TIMEOUT_MS) => {
   }
 };
 
-type GetCreditsQuery = FunctionReference<
-  "query",
+type GetCreditsMutation = FunctionReference<
+  "mutation",
   "public",
   { anonymousId?: string },
   { credits: number }
@@ -465,7 +459,7 @@ type ChargeCreditsMutation = FunctionReference<
 
 const creditsApi = api as unknown as {
   entitlements: {
-    getCreditsForActor: GetCreditsQuery;
+    getCreditsForActor: GetCreditsMutation;
     reserveCredits: ReserveCreditsMutation;
     chargeAssistantCredits: ChargeCreditsMutation;
     recordOutOfCredits: FunctionReference<
@@ -490,20 +484,25 @@ export async function GET(req: Request) {
   const cookieHeader = req.headers.get("cookie");
   const token = getConvexAuthToken(cookieHeader);
   const userHasAccount = Boolean(token);
-  const { fromCookie } = getAnonymousId(req, null);
-  let anonymousId = userHasAccount ? null : fromCookie;
-  let shouldSetAnonCookie = false;
-  if (!userHasAccount && !anonymousId) {
-    anonymousId = randomUUID();
-    shouldSetAnonCookie = true;
+  const guestId = userHasAccount
+    ? await getGuestId()
+    : await getOrCreateGuestId();
+  if (userHasAccount && guestId) {
+    try {
+      await fetchMutation(
+        api.entitlements.syncAnonymousToUser,
+        { anonymousId: guestId },
+        token ? { token } : {},
+      );
+    } catch {}
   }
 
   let credits = 0;
   try {
     const creditsResponse = await withTimeout(
-      fetchQuery(
+      fetchMutation(
         creditsApi.entitlements.getCreditsForActor,
-        { anonymousId: anonymousId ?? undefined },
+        { anonymousId: guestId ?? undefined },
         token ? { token } : {},
       ),
     );
@@ -519,12 +518,6 @@ export async function GET(req: Request) {
   const res = NextResponse.json({ entitlements: clientEntitlements });
   res.headers.set("X-User-Has-Account", userHasAccount ? "1" : "0");
   res.headers.set("X-Credits", String(credits));
-  if (shouldSetAnonCookie && anonymousId) {
-    res.headers.append(
-      "Set-Cookie",
-      buildCookieHeader(ANON_COOKIE, anonymousId),
-    );
-  }
 
   return res;
 }
@@ -613,13 +606,20 @@ export async function POST(req: Request) {
   const cookieHeader = req.headers.get("cookie");
   const token = getConvexAuthToken(cookieHeader);
   const userHasAccount = Boolean(token);
-  const { fromBody, fromCookie } = getAnonymousId(req, body);
-  let anonymousId = userHasAccount ? null : (fromBody ?? fromCookie);
-  let shouldSetAnonCookie = false;
-  if (!userHasAccount && !anonymousId) {
-    anonymousId = randomUUID();
-    shouldSetAnonCookie = true;
+  const guestChatId = getGuestChatId(body);
+  const guestId = userHasAccount
+    ? await getGuestId()
+    : await getOrCreateGuestId();
+  if (userHasAccount && guestId) {
+    try {
+      await fetchMutation(
+        api.entitlements.syncAnonymousToUser,
+        { anonymousId: guestId },
+        token ? { token } : {},
+      );
+    } catch {}
   }
+  const creditsActorId = userHasAccount ? undefined : (guestId ?? undefined);
 
   if (!env.OPENAI_API_KEY) {
     return NextResponse.json(
@@ -644,9 +644,9 @@ export async function POST(req: Request) {
   let currentCredits = 0;
   try {
     const creditsSnapshot = await withTimeout(
-      fetchQuery(
+      fetchMutation(
         creditsApi.entitlements.getCreditsForActor,
-        { anonymousId: anonymousId ?? undefined },
+        { anonymousId: creditsActorId },
         token ? { token } : {},
       ),
     );
@@ -661,7 +661,7 @@ export async function POST(req: Request) {
       fetchMutation(
         creditsApi.entitlements.reserveCredits,
         {
-          anonymousId: anonymousId ?? undefined,
+          anonymousId: creditsActorId,
           turnId,
           cost: totalCost,
           minimumCredits: totalCost,
@@ -696,7 +696,7 @@ export async function POST(req: Request) {
       await fetchMutation(
         creditsApi.entitlements.recordOutOfCredits,
         {
-          anonymousId: anonymousId ?? undefined,
+          anonymousId: creditsActorId,
           turnId,
           threadId: body.threadId,
         },
@@ -710,7 +710,7 @@ export async function POST(req: Request) {
           api.chatHistory.appendAssistantMessage,
           {
             threadId: body.threadId as Id<"chatThreads">,
-            anonymousId: anonymousId ?? undefined,
+            anonymousId: guestChatId ?? undefined,
             contentText: assistantMessage,
             actions,
           },
@@ -732,9 +732,6 @@ export async function POST(req: Request) {
     });
     headers.set("X-User-Has-Account", userHasAccount ? "1" : "0");
     headers.set("X-Credits", String(currentCredits));
-    if (anonymousId && (!fromCookie || shouldSetAnonCookie)) {
-      headers.append("Set-Cookie", buildCookieHeader(ANON_COOKIE, anonymousId));
-    }
 
     const stream = new ReadableStream({
       start(controller) {
@@ -804,9 +801,6 @@ export async function POST(req: Request) {
 
   headers.set("X-User-Has-Account", userHasAccount ? "1" : "0");
   headers.set("X-Credits", String(creditsRemaining));
-  if (anonymousId && (!fromCookie || shouldSetAnonCookie)) {
-    headers.append("Set-Cookie", buildCookieHeader(ANON_COOKIE, anonymousId));
-  }
 
   const applyHeaders = (res: NextResponse) => {
     headers.forEach((value, key) => {

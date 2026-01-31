@@ -2,10 +2,10 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 
 import type { Id } from "./_generated/dataModel";
-import { mutation, query, type MutationCtx } from "./_generated/server";
+import { mutation, type MutationCtx } from "./_generated/server";
 import { findLedgerEntryByTurnKind, insertLedgerEntry } from "./creditLedger";
 
-const DEFAULT_ANON_CREDITS = 20;
+const DEFAULT_GUEST_CREDITS = 20;
 const DEFAULT_USER_CREDITS = 0;
 
 const CHAT_TEXT_TURN_COST = 4;
@@ -40,34 +40,34 @@ const ensureUserCredits = async (ctx: MutationCtx, userId: Id<"users">) => {
   return { doc: user, credits: DEFAULT_USER_CREDITS };
 };
 
-const ensureAnonymousUser = async (ctx: MutationCtx, anonymousId: string) => {
+const ensureGuestCredits = async (ctx: MutationCtx, guestId: string) => {
   const existing = await ctx.db
-    .query("anonymousUsers")
-    .withIndex("by_anonymousId", (q) => q.eq("anonymousId", anonymousId))
+    .query("guestCredits")
+    .withIndex("by_guestId", (q) => q.eq("guestId", guestId))
     .unique();
   if (existing) {
-    return { doc: existing, credits: existing.credits };
+    return { doc: existing, credits: existing.remaining };
   }
   const now = Date.now();
-  const id = await ctx.db.insert("anonymousUsers", {
-    anonymousId,
-    credits: DEFAULT_ANON_CREDITS,
+  const id = await ctx.db.insert("guestCredits", {
+    guestId,
+    remaining: DEFAULT_GUEST_CREDITS,
     createdAt: now,
     updatedAt: now,
   });
   const doc = await ctx.db.get(id);
   if (!doc) {
-    throw new Error("Anonymous user not found");
+    throw new Error("Guest credits not found");
   }
   await insertLedgerEntry(ctx, {
     actorType: "anonymous",
-    anonymousId,
+    anonymousId: guestId,
     kind: "anon_initial_20",
-    amount: DEFAULT_ANON_CREDITS,
-    balanceAfter: DEFAULT_ANON_CREDITS,
+    amount: DEFAULT_GUEST_CREDITS,
+    balanceAfter: DEFAULT_GUEST_CREDITS,
     createdAt: now,
   });
-  return { doc, credits: DEFAULT_ANON_CREDITS };
+  return { doc, credits: DEFAULT_GUEST_CREDITS };
 };
 
 const findCharge = async (
@@ -98,7 +98,7 @@ const findCharge = async (
   return null;
 };
 
-export const getCreditsForActor = query({
+export const getCreditsForActor = mutation({
   args: { anonymousId: v.optional(v.string()) },
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
@@ -108,13 +108,10 @@ export const getCreditsForActor = query({
     }
     const anonymousId = args.anonymousId;
     if (!anonymousId) {
-      return { credits: DEFAULT_ANON_CREDITS };
+      return { credits: 0 };
     }
-    const anonymousUser = await ctx.db
-      .query("anonymousUsers")
-      .withIndex("by_anonymousId", (q) => q.eq("anonymousId", anonymousId))
-      .unique();
-    return { credits: anonymousUser?.credits ?? DEFAULT_ANON_CREDITS };
+    const { credits } = await ensureGuestCredits(ctx, anonymousId);
+    return { credits };
   },
 });
 
@@ -145,7 +142,7 @@ export const reserveCredits = mutation({
         const { credits } = await ensureUserCredits(ctx, actor.userId);
         return { credits };
       }
-      const { credits } = await ensureAnonymousUser(
+      const { credits } = await ensureGuestCredits(
         ctx,
         actor.anonymousId as string,
       );
@@ -189,7 +186,7 @@ export const reserveCredits = mutation({
       return { credits: nextCredits };
     }
 
-    const { doc, credits } = await ensureAnonymousUser(
+    const { doc, credits } = await ensureGuestCredits(
       ctx,
       actor.anonymousId as string,
     );
@@ -200,7 +197,7 @@ export const reserveCredits = mutation({
     }
     const nextCredits = credits - args.cost;
     await ctx.db.patch(doc._id, {
-      credits: nextCredits,
+      remaining: nextCredits,
       updatedAt: now,
     });
     await ctx.db.insert("creditCharges", {
@@ -248,7 +245,7 @@ export const chargeAssistantCredits = mutation({
       return { credits };
     }
 
-    const { credits } = await ensureAnonymousUser(
+    const { credits } = await ensureGuestCredits(
       ctx,
       actor.anonymousId as string,
     );
@@ -300,7 +297,7 @@ export const recordOutOfCredits = mutation({
       return { recorded: true };
     }
 
-    const { credits } = await ensureAnonymousUser(
+    const { credits } = await ensureGuestCredits(
       ctx,
       actor.anonymousId as string,
     );
@@ -326,17 +323,17 @@ export const syncAnonymousToUser = mutation({
       throw new Error("Unauthorized");
     }
 
-    const anonymousUser = await ctx.db
-      .query("anonymousUsers")
-      .withIndex("by_anonymousId", (q) => q.eq("anonymousId", args.anonymousId))
+    const guestCredits = await ctx.db
+      .query("guestCredits")
+      .withIndex("by_guestId", (q) => q.eq("guestId", args.anonymousId))
       .unique();
-    if (!anonymousUser || anonymousUser.mergedToUserId) {
+    if (!guestCredits || guestCredits.consumedByUserId) {
       return { mergedThreads: 0, creditsTransferred: 0 };
     }
 
     const user = await ctx.db.get(userId);
     const currentCredits = typeof user?.credits === "number" ? user.credits : 0;
-    const anonCredits = anonymousUser.credits ?? 0;
+    const anonCredits = guestCredits.remaining ?? 0;
     const now = Date.now();
     let nextCredits = currentCredits;
 
@@ -373,9 +370,9 @@ export const syncAnonymousToUser = mutation({
       });
     }
 
-    await ctx.db.patch(anonymousUser._id, {
-      credits: 0,
-      mergedToUserId: userId,
+    await ctx.db.patch(guestCredits._id, {
+      remaining: 0,
+      consumedByUserId: userId,
       updatedAt: now,
     });
 

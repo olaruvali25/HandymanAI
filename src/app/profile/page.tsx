@@ -180,7 +180,7 @@ export default function ProfilePage() {
                   >
                     Manage billing
                   </Button>
-                  <Button asChild variant="outline">
+                  <Button asChild className="bg-orange-500 text-black">
                     <Link href="/pricing">View pricing</Link>
                   </Button>
                 </div>
@@ -201,7 +201,7 @@ export default function ProfilePage() {
                   </div>
                   <div className="text-sm text-[var(--muted)]">credits</div>
                 </div>
-                <Button asChild variant="outline">
+                <Button asChild className="bg-orange-500 text-black">
                   <Link href="/pricing?topup=1">Get credits</Link>
                 </Button>
               </CardContent>

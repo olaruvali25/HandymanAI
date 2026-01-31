@@ -18,9 +18,9 @@ Browser (Next.js UI)
 
 ### Guest identity (anonymous)
 
-- Cookie: `fixly_anon` (set by `GET /api/ai` and sometimes by `POST /api/ai`)
+- Cookie: `fixly_guest_id` (httpOnly, set server-side by `GET /api/ai` / `POST /api/ai`)
 - Stored in Convex:
-  - Credits: `anonymousUsers`
+  - Credits: `guestCredits`
   - Chat history: `chatThreads` + `chatMessages` with `anonymousId` / `guestChatId`
 
 On signup/login, guest state is merged into the user:
@@ -46,7 +46,7 @@ On signup/login, guest state is merged into the user:
 `/api/ai`:
 
 1. Reads auth token (if any) from cookies.
-2. Determines actor: authenticated user or guest `fixly_anon`.
+2. Determines actor: authenticated user or guest `fixly_guest_id`.
 3. Calls Convex:
    - Reserve credits first (`convex/entitlements.ts` → `reserveCredits`)
 4. Calls OpenAI to generate the reply.

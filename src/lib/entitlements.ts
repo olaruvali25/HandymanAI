@@ -6,7 +6,6 @@ import type {
 export type { Capabilities, ClientEntitlements, GatingFlags };
 
 export const THREAD_COOKIE = "fixly_thread";
-export const ANON_COOKIE = "fixly_anon";
 const CONVEX_AUTH_COOKIE = "__convexAuthJWT";
 const CONVEX_AUTH_HOST_COOKIE = "__Host-__convexAuthJWT";
 const CONVEX_REFRESH_COOKIE = "__convexAuthRefreshToken";
@@ -26,11 +25,6 @@ export const parseCookies = (cookieHeader: string | null) => {
       if (key) acc[key] = decodeURIComponent(value);
       return acc;
     }, {});
-};
-
-export const buildCookieHeader = (name: string, value: string) => {
-  const maxAge = 60 * 60 * 24 * 90;
-  return `${name}=${value}; Path=/; Max-Age=${maxAge}; SameSite=Lax`;
 };
 
 export const getConvexAuthToken = (cookieHeader: string | null) => {

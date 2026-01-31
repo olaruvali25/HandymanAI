@@ -49,6 +49,13 @@ const schema = defineSchema({
     updatedAt: v.number(),
     mergedToUserId: v.optional(v.id("users")),
   }).index("by_anonymousId", ["anonymousId"]),
+  guestCredits: defineTable({
+    guestId: v.string(),
+    remaining: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    consumedByUserId: v.optional(v.id("users")),
+  }).index("by_guestId", ["guestId"]),
   tasks: defineTable({
     userId: v.id("users"),
     title: v.string(),

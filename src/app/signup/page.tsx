@@ -42,6 +42,11 @@ export default function SignupPage() {
     },
   } as const;
 
+  const oauthProviderSlugs: Record<keyof typeof oauthProviders, string> = {
+    google: "oidc",
+    facebook: "facebook",
+  };
+
   const formatAuthError = (
     message: string,
     provider?: keyof typeof oauthProviders,
@@ -76,7 +81,9 @@ export default function SignupPage() {
     setIsOauthSubmitting(provider);
     try {
       await signOut();
-      const result = await signIn(provider, { redirectTo: returnTo });
+      const result = await signIn(oauthProviderSlugs[provider], {
+        redirectTo: returnTo,
+      });
       if (!result.signingIn && !result.redirect) {
         setError(`${oauthProviders[provider].label} sign-in failed.`);
       }

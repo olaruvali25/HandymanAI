@@ -124,17 +124,39 @@ export default function HelpPage() {
   const [formState, setFormState] = useState<
     "idle" | "submitting" | "success" | "error"
   >("idle");
+  const [formError, setFormError] = useState<string | null>(null);
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [message, setMessage] = useState("");
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setFormState("submitting");
+    setFormError(null);
 
-    // Simulate form submission
     try {
-      await new Promise((resolve) => setTimeout(resolve, 1500));
+      const response = await fetch("/api/contact", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, email, message }),
+      });
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => null)) as {
+          error?: string;
+        } | null;
+        throw new Error(payload?.error ?? "Failed to send message.");
+      }
       setFormState("success");
-    } catch {
+      setName("");
+      setEmail("");
+      setMessage("");
+    } catch (err) {
       setFormState("error");
+      setFormError(
+        err instanceof Error
+          ? err.message
+          : "Something went wrong. Please try again.",
+      );
     }
   };
 
@@ -228,6 +250,8 @@ export default function HelpPage() {
                           id="name"
                           placeholder="Your name"
                           required
+                          value={name}
+                          onChange={(event) => setName(event.target.value)}
                           className="border-white/10 bg-white/5 text-white placeholder:text-white/20 focus:border-[var(--accent)]/50 focus:ring-[var(--accent)]/20"
                         />
                       </div>
@@ -243,6 +267,8 @@ export default function HelpPage() {
                           type="email"
                           placeholder="you@example.com"
                           required
+                          value={email}
+                          onChange={(event) => setEmail(event.target.value)}
                           className="border-white/10 bg-white/5 text-white placeholder:text-white/20 focus:border-[var(--accent)]/50 focus:ring-[var(--accent)]/20"
                         />
                       </div>
@@ -258,6 +284,8 @@ export default function HelpPage() {
                         id="message"
                         required
                         rows={5}
+                        value={message}
+                        onChange={(event) => setMessage(event.target.value)}
                         className="flex w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white placeholder:text-white/20 focus:border-[var(--accent)]/50 focus:ring-2 focus:ring-[var(--accent)]/20 focus:outline-none"
                         placeholder="How can we help you?"
                       />
@@ -273,7 +301,7 @@ export default function HelpPage() {
                     </Button>
                     {formState === "error" && (
                       <p className="text-center text-sm text-red-400">
-                        Something went wrong. Please try again.
+                        {formError ?? "Something went wrong. Please try again."}
                       </p>
                     )}
                   </form>

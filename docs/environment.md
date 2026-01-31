@@ -45,6 +45,20 @@ Copy the tracked template and fill values:
 - **Used by:** `/api/ai` and `/api/chat`
 - **Notes:** When attachments exist, `/api/ai` may override to a vision-capable model.
 
+#### `RESEND_API_KEY` (optional, contact form)
+
+- **What it is:** Resend API key for sending support emails.
+- **Where to get it:** Resend dashboard (create an API key).
+- **Where to put it:** `.env.local`
+- **Used by:** `src/app/api/contact/route.ts`
+
+#### `CONTACT_FROM` / `CONTACT_TO` (optional, contact form)
+
+- **What they are:** Sender + recipient for support emails.
+- **Defaults:** `Fixly <contact@fixlyapp.dev>` and `contact@fixlyapp.dev`.
+- **Where to put them:** `.env.local`
+- **Used by:** `src/app/api/contact/route.ts`
+
 #### `FIXLY_DISABLE_STREAMING` (optional feature flag)
 
 - **What it is:** Disables streaming SSE from `/api/ai` when set to `1`.

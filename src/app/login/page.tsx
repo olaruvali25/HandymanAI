@@ -41,11 +41,6 @@ export default function LoginPage() {
     },
   } as const;
 
-  const oauthProviderSlugs: Record<keyof typeof oauthProviders, string> = {
-    google: "oidc",
-    facebook: "facebook",
-  };
-
   const formatAuthError = (
     message: string,
     provider?: keyof typeof oauthProviders,
@@ -80,7 +75,7 @@ export default function LoginPage() {
     setIsOauthSubmitting(provider);
     try {
       await signOut();
-      const result = await signIn(oauthProviderSlugs[provider], {
+      const result = await signIn(provider, {
         redirectTo: returnTo,
       });
       if (!result.signingIn && !result.redirect) {

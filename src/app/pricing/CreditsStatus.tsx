@@ -19,7 +19,7 @@ export default function CreditsStatus() {
       </div>
       {!entitlements.userHasAccount ? (
         <div className="mt-3 text-sm leading-relaxed text-[var(--muted)]">
-          Youre browsing as a guest. Your credits carry over if you create an
+          You&apos;re browsing as a guest. Your credits carry over if you create an
           account later.
         </div>
       ) : null}

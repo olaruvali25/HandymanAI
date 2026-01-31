@@ -22,6 +22,11 @@ export default convexAuthNextjsMiddleware(
   {
     // Avoid proxying /api/auth so the local route handler can return the OAuth verifier.
     apiRoute: "/api/auth-proxy",
+    // Don't strip ?code=... from auth endpoints; /api/auth/signin/* needs it.
+    shouldHandleCode: (request) => {
+      const pathname = request.nextUrl.pathname;
+      return !pathname.startsWith("/api/auth");
+    },
   },
 );
 
